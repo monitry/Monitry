@@ -6,8 +6,8 @@ MODEL = "claude-sonnet-4-6"
 # How often to run a monitoring check (seconds)
 CHECK_INTERVAL = 10
 
-# How many seconds of keylog to include
-KEYLOG_WINDOW = 20
+
+MAX_TOKENS_PER_RESPONSE = 512
 
 # Path to the running context log
 CONTEXT_FILE = os.path.join(os.path.dirname(__file__), "data", "context.txt")

@@ -10,7 +10,6 @@ import subprocess
 import keyring
 import config
 from capture import screen
-from capture import keylogger_proc as keylogger
 from ai import client as ai_client
 from alerts import notifier
 
@@ -75,6 +74,26 @@ MODELS = {
     "Opus 4.8   — ~$0.47/hr": "claude-opus-4-8",
 }
 
+RESOLUTIONS = {
+    "1280px — high detail": 1280,
+    "800px  — medium":       800,
+    "512px  — low":          512,
+    "320px  — minimal":      320,
+}
+
+_TYPING_SENTENCES = [
+    "I will stop getting distracted and focus on the task I set out to complete today.",
+    "Every minute I waste is a minute I cannot get back, so I choose to stay on track.",
+    "Distractions are temporary but the work I finish today will matter tomorrow and beyond.",
+    "I am capable of deep focus and I recommit right now to the task in front of me.",
+    "The sooner I get back to work the sooner I will feel the satisfaction of finishing.",
+    "Staying on task is hard but it is the only way to make real progress on my goals.",
+    "I acknowledge I lost focus and I am now making the active choice to return to work.",
+    "Short breaks are fine but right now it is time to close distractions and get things done.",
+    "My future self will thank me for pushing through this moment and staying productive.",
+    "Getting back on track now means I will have more free time later when the work is done.",
+]
+
 STATUS_COLORS = {
     "idle":    FG2,
     "on_task": "#3fb950",
@@ -120,6 +139,7 @@ class MonitryApp:
         self.root.configure(bg=BG)
 
         self._stop_event = threading.Event()
+        self._paused     = threading.Event()   # set while interrupt popup is open
         self._log_queue: queue.Queue = queue.Queue()
         self._running = False
 
@@ -156,24 +176,34 @@ class MonitryApp:
         )
         model_menu.grid(row=1, column=1, sticky="ew", pady=5, ipady=3)
 
+        # ── Resolution ──
+        tk.Label(outer, text="Resolution:", **lbl_opts).grid(row=2, column=0, sticky="w", pady=5)
+        self.res_var = tk.StringVar(value=list(RESOLUTIONS.keys())[0])
+        res_menu = ttk.Combobox(
+            outer, textvariable=self.res_var,
+            values=list(RESOLUTIONS.keys()),
+            state="readonly", width=42,
+        )
+        res_menu.grid(row=2, column=1, sticky="ew", pady=5, ipady=3)
+
         # ── API Key ──
         self._key_status_var = tk.StringVar()
         self._refresh_key_status_label()
-        tk.Label(outer, text="API Key:", **lbl_opts).grid(row=2, column=0, sticky="w", pady=5)
+        tk.Label(outer, text="API Key:", **lbl_opts).grid(row=3, column=0, sticky="w", pady=5)
         key_row = tk.Frame(outer, bg=BG)
-        key_row.grid(row=2, column=1, sticky="ew", pady=5)
+        key_row.grid(row=3, column=1, sticky="ew", pady=5)
         tk.Label(key_row, textvariable=self._key_status_var, bg=BG, fg=FG2, anchor="w").pack(side="left")
         _Btn(key_row, text="Set Key", command=self._open_key_dialog,
              bg=BG, fg=BLUE, hover=BG2, font=("Helvetica", 11), padx=6, pady=2,
              ).pack(side="left", padx=(6, 0))
 
         # ── Divider ──
-        tk.Frame(outer, bg=BG3, height=1).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 4))
+        tk.Frame(outer, bg=BG3, height=1).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 4))
 
         # ── Start/Stop button ──
         self.btn = _Btn(outer, text="Start Monitoring", command=self._toggle,
                         bg=GREEN, hover=GREEN_HV)
-        self.btn.grid(row=4, column=0, columnspan=2, pady=(6, 4))
+        self.btn.grid(row=5, column=0, columnspan=2, pady=(6, 4))
 
         # ── Status ──
         self.status_var = tk.StringVar(value="Idle")
@@ -182,11 +212,11 @@ class MonitryApp:
             bg=BG, fg=STATUS_COLORS["idle"],
             font=("Helvetica", 15, "bold"),
         )
-        self.status_label.grid(row=5, column=0, columnspan=2, pady=(2, 8))
+        self.status_label.grid(row=6, column=0, columnspan=2, pady=(2, 8))
 
         # ── Log (Text + dark scrollbar) ──
         log_frame = tk.Frame(outer, bg=BG2, highlightthickness=1, highlightbackground=BG3)
-        log_frame.grid(row=6, column=0, columnspan=2, sticky="nsew", pady=(0, 4))
+        log_frame.grid(row=7, column=0, columnspan=2, sticky="nsew", pady=(0, 4))
 
         self.log = tk.Text(
             log_frame, width=56, height=13,
@@ -291,6 +321,7 @@ class MonitryApp:
             return
 
         config.MODEL = MODELS[self.model_var.get()]
+        max_width = RESOLUTIONS[self.res_var.get()]
 
         self._stop_event.clear()
         self._running = True
@@ -298,9 +329,7 @@ class MonitryApp:
         self.btn.recolor(RED, hover=RED_HV)
         self.task_entry.config(state="disabled")
 
-        keylogger.start()  # must be on the main thread on macOS
-
-        thread = threading.Thread(target=self._monitor_loop, args=(task,), daemon=True)
+        thread = threading.Thread(target=self._monitor_loop, args=(task, max_width), daemon=True)
         thread.start()
 
         self._enqueue_log(f"Started — {task}")
@@ -308,8 +337,8 @@ class MonitryApp:
 
     def _stop(self):
         self._stop_event.set()
+        self._paused.clear()
         self._running = False
-        keylogger.stop()
         self.btn.relabel("Start Monitoring")
         self.btn.recolor(GREEN, hover=GREEN_HV)
         self.task_entry.config(state="normal")
@@ -319,7 +348,7 @@ class MonitryApp:
 
     # ── Monitor loop (background thread) ─────────────────────────────────────
 
-    def _monitor_loop(self, task: str):
+    def _monitor_loop(self, task: str, max_width: int = 1280):
         import time
 
         os.makedirs(os.path.dirname(config.CONTEXT_FILE), exist_ok=True)
@@ -329,18 +358,27 @@ class MonitryApp:
 
         interval = MIN_INTERVAL  # ramp up to MAX_INTERVAL over time
 
+        self._stop_event.wait(timeout=5)  # brief grace period before first check
+
         while not self._stop_event.is_set():
+            # Wait while an interrupt popup is showing
+            while self._paused.is_set() and not self._stop_event.is_set():
+                self._stop_event.wait(timeout=0.5)
+
+            if self._stop_event.is_set():
+                break
+
             t0 = time.time()
             try:
-                screenshot_b64 = screen.grab_screenshot()
-                keylog = keylogger.get_recent(config.KEYLOG_WINDOW)
+                screenshot_b64 = screen.grab_screenshot(max_width)
                 context = self._read_context()
 
-                result = ai_client.analyze(task, screenshot_b64, keylog, context)
+                result = ai_client.analyze(task, screenshot_b64, context)
 
                 on_task = result.get("onTask", True)
                 activity = result.get("activity", "unknown")
                 reminder = result.get("reminder", "")
+                interupt = result.get("interupt", False)
 
                 if on_task:
                     self._enqueue_status("ON TASK", STATUS_COLORS["on_task"])
@@ -348,14 +386,15 @@ class MonitryApp:
                     self._write_status("on_task", task, activity)
                 else:
                     self._enqueue_status("OFF TASK", STATUS_COLORS["off_task"])
-                    msg = reminder if reminder else f"Get back to: {task}"
-                    if reminder:
-                        self._enqueue_log(f"  → {reminder}")
-                    notifier.alert_off_task(task, activity, reminder)
-                    self._log_queue.put(("popup", msg))
                     self._append_context(f"[OFF-TASK] {activity}")
                     self._write_status("off_task", task, activity)
                     interval = MIN_INTERVAL  # snap down; will step back up each loop
+                msg = reminder if reminder else ""
+                if reminder:
+                    self._enqueue_log(f"  → {reminder}")
+                    notifier.alert_off_task(task, reminder, interupt)
+                    if interupt:
+                        self._log_queue.put(("popup", msg))
 
             except Exception as exc:
                 self._enqueue_log(f"Error: {exc}")
@@ -417,10 +456,17 @@ class MonitryApp:
             pass
         self.root.after(200, self._poll_queue)
 
+    def _dismiss_popup(self, pop):
+        self._paused.clear()
+        if pop.winfo_exists():
+            pop.destroy()
+
     def _show_popup(self, message: str):
         # Close any existing popup first
         if hasattr(self, "_popup") and self._popup and self._popup.winfo_exists():
             self._popup.destroy()
+
+        self._paused.set()   # pause the monitor loop until dismissed
 
         # Force this process to the front so the popup appears above other apps
         subprocess.Popen([
@@ -436,6 +482,8 @@ class MonitryApp:
         pop.wm_attributes("-topmost", True)
         self._popup = pop
 
+        sentence = random.choice(_TYPING_SENTENCES)
+
         frame = tk.Frame(pop, bg="#2a0a0a", padx=24, pady=20)
         frame.pack(fill="both", expand=True)
 
@@ -443,18 +491,47 @@ class MonitryApp:
                  font=("Helvetica", 15, "bold")).pack(anchor="w")
 
         tk.Label(frame, text=message, bg="#2a0a0a", fg="#e8e8e8",
-                 font=("Helvetica", 12), wraplength=300, justify="left",
-                 ).pack(anchor="w", pady=(6, 14))
+                 font=("Helvetica", 12), wraplength=360, justify="left",
+                 ).pack(anchor="w", pady=(6, 12))
 
-        _Btn(frame, text="Back to work", command=pop.destroy,
-             bg="#6e1a1a", fg="white", hover="#8b2020",
-             font=("Helvetica", 11, "bold"), padx=12, pady=6,
-             ).pack(anchor="w")
+        tk.Label(frame, text="Type this to get back to work:",
+                 bg="#2a0a0a", fg="#888888", font=("Helvetica", 10)).pack(anchor="w")
+
+        tk.Label(frame, text=sentence, bg="#1a0505", fg="#f8c8c8",
+                 font=("Menlo", 10), wraplength=360, justify="left",
+                 padx=8, pady=6, relief="flat",
+                 ).pack(fill="x", pady=(4, 8))
+
+        entry_var = tk.StringVar()
+        entry = tk.Entry(frame, textvariable=entry_var,
+                         bg="#3a0a0a", fg="white", insertbackground="white",
+                         font=("Menlo", 10), relief="flat",
+                         highlightthickness=1, highlightbackground="#6e1a1a")
+        entry.pack(fill="x", ipady=5, pady=(0, 10))
+        entry.focus_force()
+
+        btn = _Btn(frame, text="Back to work", command=lambda: self._dismiss_popup(pop),
+                   bg="#3a1a1a", fg="#666666", hover="#3a1a1a",
+                   font=("Helvetica", 11, "bold"), padx=12, pady=6)
+        btn.pack(anchor="w")
+
+        def _on_type(*_):
+            typed = entry_var.get()
+            if typed == sentence:
+                btn.recolor("#6e1a1a", hover="#8b2020")
+                btn._lbl.configure(fg="white")
+                btn._cmd = lambda: self._dismiss_popup(pop)
+            else:
+                btn.recolor("#3a1a1a", hover="#3a1a1a")
+                btn._lbl.configure(fg="#666666")
+                btn._cmd = lambda: None
+
+        entry_var.trace_add("write", _on_type)
 
         pop.lift()
         pop.focus_force()
-        # Auto-dismiss after 30 s if not manually closed
-        pop.after(30_000, lambda: pop.destroy() if pop.winfo_exists() else None)
+        # Auto-dismiss after 90 s if not manually closed
+        pop.after(90_000, lambda: self._dismiss_popup(pop) if pop.winfo_exists() else None)
 
 
 def main():
