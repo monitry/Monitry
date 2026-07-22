@@ -1,19 +1,22 @@
-import tkinter as tk
-from tkinter import ttk
-import threading
-import queue
 import datetime
 import os
+import queue
 import random
 import subprocess
+import threading
+import tkinter as tk
+from tkinter import ttk
 
 import keyring
-import config
-from capture import screen
-from ai import client as ai_client
-from alerts import notifier
 
-KEYCHAIN_SERVICE = "monitry"
+import config
+from alerts import notifier
+from core import context as context_log
+from core import status as status_file
+from core.check import run_check
+from core.interval import AdaptiveInterval
+
+KEYCHAIN_SERVICE = "onitry"
 KEYCHAIN_USER    = "anthropic_api_key"
 
 # ── Adaptive interval ─────────────────────────────────────────────────────────
@@ -131,10 +134,10 @@ def _apply_ttk_style():
     )
 
 
-class MonitryApp:
+class OnitryApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Monitry")
+        self.root.title("Onitry")
         self.root.resizable(False, False)
         self.root.configure(bg=BG)
 
@@ -344,19 +347,16 @@ class MonitryApp:
         self.task_entry.config(state="normal")
         self._enqueue_status("Stopped", STATUS_COLORS["stopped"])
         self._enqueue_log("Monitoring stopped.")
-        self._write_status("idle")
+        status_file.write(config.STATUS_FILE, "idle")
 
     # ── Monitor loop (background thread) ─────────────────────────────────────
 
     def _monitor_loop(self, task: str, max_width: int = 1280):
         import time
 
-        os.makedirs(os.path.dirname(config.CONTEXT_FILE), exist_ok=True)
-        with open(config.CONTEXT_FILE, "w") as f:
-            ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            f.write(f"Session started: {ts}\nTask: {task}\n\n")
+        context_log.init_log(config.CONTEXT_FILE, task)
 
-        interval = MIN_INTERVAL  # ramp up to MAX_INTERVAL over time
+        interval = AdaptiveInterval(MIN_INTERVAL, MAX_INTERVAL, INTERVAL_STEP, JITTER_LO, JITTER_HI)
 
         self._stop_event.wait(timeout=5)  # brief grace period before first check
 
@@ -370,30 +370,28 @@ class MonitryApp:
 
             t0 = time.time()
             try:
-                screenshot_b64 = screen.grab_screenshot(max_width)
-                context = self._read_context()
-
-                result = ai_client.analyze(task, screenshot_b64, context)
+                context = context_log.read_tail(config.CONTEXT_FILE)
+                result = run_check(task, context, max_width)
 
                 on_task = result.get("onTask", True)
                 activity = result.get("activity", "unknown")
                 reminder = result.get("reminder", "")
-                interupt = result.get("interupt", False)
+                interrupt = result.get("interrupt", False)
 
                 if on_task:
                     self._enqueue_status("ON TASK", STATUS_COLORS["on_task"])
-                    self._append_context(activity)
-                    self._write_status("on_task", task, activity)
+                    context_log.append(config.CONTEXT_FILE, activity)
+                    status_file.write(config.STATUS_FILE, "on_task", task, activity)
                 else:
                     self._enqueue_status("OFF TASK", STATUS_COLORS["off_task"])
-                    self._append_context(f"[OFF-TASK] {activity}")
-                    self._write_status("off_task", task, activity)
-                    interval = MIN_INTERVAL  # snap down; will step back up each loop
+                    context_log.append(config.CONTEXT_FILE, f"[OFF-TASK] {activity}")
+                    status_file.write(config.STATUS_FILE, "off_task", task, activity)
+                    interval.snap_down()
                 msg = reminder if reminder else ""
                 if reminder:
                     self._enqueue_log(f"  → {reminder}")
-                    notifier.alert_off_task(task, reminder, interupt)
-                    if interupt:
+                    notifier.alert_off_task(task, reminder, interrupt)
+                    if interrupt:
                         self._log_queue.put(("popup", msg))
 
             except Exception as exc:
@@ -401,35 +399,14 @@ class MonitryApp:
                 activity = "error"
                 on_task = True  # don't fire alerts on API errors
 
-            # Jittered sleep: multiply base interval by 0.4–1.6, floor at 10s
-            effective = max(MIN_INTERVAL, interval * random.uniform(JITTER_LO, JITTER_HI))
             elapsed = time.time() - t0
+            sleep_seconds, effective = interval.sample_wait(elapsed)
             self._enqueue_log(f"{'ON TASK' if on_task else 'OFF TASK'}: {activity}  (next in {effective:.0f}s)")
-            self._stop_event.wait(timeout=max(0, effective - elapsed))
+            self._stop_event.wait(timeout=sleep_seconds)
 
-            # Step interval back toward max after every check
-            interval = min(interval + INTERVAL_STEP, MAX_INTERVAL)
+            interval.step_up()
 
     # ── Helpers ───────────────────────────────────────────────────────────────
-
-    def _read_context(self) -> str:
-        if not os.path.exists(config.CONTEXT_FILE):
-            return ""
-        with open(config.CONTEXT_FILE) as f:
-            lines = [l.rstrip() for l in f if l.strip()]
-        return "\n".join(lines[-10:])
-
-    def _append_context(self, activity: str):
-        os.makedirs(os.path.dirname(config.CONTEXT_FILE), exist_ok=True)
-        ts = datetime.datetime.now().strftime("%H:%M:%S")
-        with open(config.CONTEXT_FILE, "a") as f:
-            f.write(f"[{ts}] {activity}\n")
-
-    def _write_status(self, status: str, task: str = "", activity: str = ""):
-        import json
-        os.makedirs(os.path.dirname(config.STATUS_FILE), exist_ok=True)
-        with open(config.STATUS_FILE, "w") as f:
-            json.dump({"status": status, "task": task, "activity": activity}, f)
 
     def _enqueue_log(self, msg: str):
         ts = datetime.datetime.now().strftime("%H:%M:%S")
@@ -538,7 +515,7 @@ def main():
     import multiprocessing
     multiprocessing.set_start_method("spawn", force=True)
     root = tk.Tk()
-    MonitryApp(root)
+    OnitryApp(root)
     root.mainloop()
 
 

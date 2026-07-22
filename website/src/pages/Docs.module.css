@@ -1,0 +1,229 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+  padding-top: var(--nav-h);
+}
+
+/* ── Sidebar ────────────────────────────────────────────────────────────── */
+.sidebar {
+  width: 240px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  padding: 48px 24px;
+  position: sticky;
+  top: var(--nav-h);
+  height: calc(100vh - var(--nav-h));
+  overflow-y: auto;
+  background: var(--bg2);
+}
+
+.sidebarLabel {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--fg3);
+  margin-bottom: 16px;
+  padding: 0 12px;
+}
+
+.sidebarLink {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--fg2);
+  transition: color 0.15s, background 0.15s;
+  margin-bottom: 2px;
+}
+
+.sidebarLink:hover { color: var(--fg); background: var(--bg3); }
+
+.sidebarActive { color: var(--fg) !important; background: var(--bg3) !important; }
+
+/* ── Article ────────────────────────────────────────────────────────────── */
+.content {
+  flex: 1;
+  padding: 64px;
+  max-width: 760px;
+}
+
+.article h1 {
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -1px;
+  margin-bottom: 16px;
+}
+
+.article h2 {
+  font-size: 18px;
+  font-weight: 700;
+  margin-top: 40px;
+  margin-bottom: 12px;
+  color: var(--fg);
+}
+
+.article h3 {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.article p {
+  font-size: 15px;
+  color: var(--fg2);
+  line-height: 1.75;
+  margin-bottom: 16px;
+}
+
+.article ul, .article ol {
+  padding-left: 24px;
+  margin-bottom: 20px;
+}
+
+.article li {
+  font-size: 15px;
+  color: var(--fg2);
+  line-height: 1.75;
+  margin-bottom: 6px;
+}
+
+.article a {
+  color: var(--green);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.article strong { color: var(--fg); font-weight: 600; }
+
+.lead {
+  font-size: 17px !important;
+  color: var(--fg2);
+  margin-bottom: 40px !important;
+  padding-bottom: 32px;
+  border-bottom: 1px solid var(--border);
+}
+
+pre {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px;
+  overflow-x: auto;
+  margin: 16px 0 24px;
+}
+
+code {
+  font-family: "Menlo", "Monaco", monospace;
+  font-size: 13px;
+  color: #c8d3f5;
+}
+
+pre code { color: #c8d3f5; }
+
+p code, li code {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-size: 12.5px;
+  color: #c8d3f5;
+}
+
+/* ── Tip box ────────────────────────────────────────────────────────────── */
+.tip {
+  background: rgba(46, 160, 67, 0.08);
+  border: 1px solid rgba(46, 160, 67, 0.25);
+  border-radius: 8px;
+  padding: 16px 20px;
+  font-size: 14px;
+  color: var(--fg2);
+  margin-top: 24px;
+  line-height: 1.7;
+}
+
+.tip strong { color: var(--green); }
+
+/* ── Two-col cards ──────────────────────────────────────────────────────── */
+.twoCol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 20px 0;
+}
+
+.card {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 24px;
+}
+
+.card h3 {
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: var(--fg);
+}
+
+.card p {
+  font-size: 13px;
+  color: var(--fg2);
+  line-height: 1.65;
+  margin-bottom: 0;
+}
+
+/* ── Table ──────────────────────────────────────────────────────────────── */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0 28px;
+  font-size: 14px;
+}
+
+.table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg3);
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--border);
+}
+
+.table td {
+  padding: 12px 14px;
+  color: var(--fg2);
+  border-bottom: 1px solid var(--border);
+}
+
+.table tr:last-child td { border-bottom: none; }
+
+/* ── FAQ ────────────────────────────────────────────────────────────────── */
+.faqList { margin-top: 8px; }
+
+.faqItem {
+  padding: 28px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.faqItem:last-child { border-bottom: none; }
+
+.faqItem h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: var(--fg);
+}
+
+.faqItem p {
+  font-size: 14px;
+  color: var(--fg2);
+  line-height: 1.75;
+  margin-bottom: 0;
+}

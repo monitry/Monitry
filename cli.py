@@ -1,28 +1,12 @@
-import os
+import datetime
 import sys
 import time
-import datetime
 
 import config
-from capture import screen, keylogger
-from ai import client as ai_client
 from alerts import notifier
-
-
-def read_context() -> str:
-    if not os.path.exists(config.CONTEXT_FILE):
-        return ""
-    with open(config.CONTEXT_FILE, "r") as f:
-        content = f.read()
-    # Return only the tail to stay within token budget
-    return content[-config.CONTEXT_MAX_CHARS:]
-
-
-def append_context(activity: str):
-    os.makedirs(os.path.dirname(config.CONTEXT_FILE), exist_ok=True)
-    ts = datetime.datetime.now().strftime("%H:%M:%S")
-    with open(config.CONTEXT_FILE, "a") as f:
-        f.write(f"[{ts}] {activity}\n")
+from core import context as context_log
+from core.check import run_check
+from core.interval import AdaptiveInterval
 
 
 def check_api_key():
@@ -33,56 +17,50 @@ def check_api_key():
 
 
 def run(task: str):
-    print(f"\nMonitry started.")
+    print("\nOnitry started.")
     print(f"Task: {task}")
     print(f"Checking every {config.CHECK_INTERVAL}s. Press Ctrl+C to stop.\n")
 
-    keylogger.start()
-
-    # Clear/create context file for this session
-    os.makedirs(os.path.dirname(config.CONTEXT_FILE), exist_ok=True)
-    with open(config.CONTEXT_FILE, "w") as f:
-        ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        f.write(f"Session started: {ts}\nTask: {task}\n\n")
+    context_log.init_log(config.CONTEXT_FILE, task)
+    interval = AdaptiveInterval(min_interval=config.CHECK_INTERVAL)
 
     try:
         while True:
-            loop_start = time.time()
+            t0 = time.time()
             try:
                 print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Capturing...")
 
-                screenshot_b64 = screen.grab_screenshot()
-                keylog = keylogger.get_recent(config.KEYLOG_WINDOW)
-                context = read_context()
-
-                result = ai_client.analyze(task, screenshot_b64, keylog, context)
+                context = context_log.read_tail(config.CONTEXT_FILE)
+                result = run_check(task, context)
 
                 on_task = result.get("onTask", True)
                 activity = result.get("activity", "unknown")
                 reminder = result.get("reminder", "")
+                interrupt = result.get("interrupt", False)
 
                 status = "ON TASK" if on_task else "OFF TASK"
                 print(f"  {status}: {activity}")
 
                 if on_task:
-                    append_context(activity)
+                    context_log.append(config.CONTEXT_FILE, activity)
                 else:
                     print(f"  Reminder: {reminder}")
-                    notifier.alert_off_task(task, activity, reminder)
-                    append_context(f"[OFF-TASK] {activity}")
+                    notifier.alert_off_task(task, reminder, interrupt)
+                    context_log.append(config.CONTEXT_FILE, f"[OFF-TASK] {activity}")
+                    interval.snap_down()
 
             except KeyboardInterrupt:
                 raise
             except Exception as e:
                 print(f"  Error during check: {e}")
 
-            elapsed = time.time() - loop_start
-            sleep_time = max(0, config.CHECK_INTERVAL - elapsed)
-            time.sleep(sleep_time)
+            elapsed = time.time() - t0
+            sleep_seconds, _ = interval.sample_wait(elapsed)
+            time.sleep(sleep_seconds)
+            interval.step_up()
 
     except KeyboardInterrupt:
-        print("\nMonitry stopped.")
-        keylogger.stop()
+        print("\nOnitry stopped.")
 
 
 if __name__ == "__main__":

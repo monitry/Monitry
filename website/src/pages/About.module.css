@@ -1,0 +1,141 @@
+.page {
+  padding-top: var(--nav-h);
+}
+
+.inner {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 72px 40px;
+}
+
+.section {
+  margin-bottom: 96px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--green);
+  margin-bottom: 14px;
+}
+
+.title {
+  font-size: clamp(28px, 4vw, 40px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1.1;
+  margin-bottom: 48px;
+}
+
+.sub {
+  font-size: 16px;
+  color: var(--fg2);
+  margin-bottom: 32px;
+  line-height: 1.65;
+}
+
+/* ── Roadmap ────────────────────────────────────────────────────────────── */
+.roadmapGroup {
+  margin-bottom: 48px;
+}
+
+.groupTitle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg2);
+  letter-spacing: 0.5px;
+  margin-bottom: 20px;
+}
+
+.dotShipped {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  flex-shrink: 0;
+}
+
+.dotPlanned {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--fg3);
+  flex-shrink: 0;
+}
+
+.roadmapList {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.roadmapItem {
+  padding: 22px 28px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.15s;
+}
+
+.roadmapItem:last-child { border-bottom: none; }
+
+.roadmapItem:hover { background: var(--bg2); }
+
+.roadmapItem h4 {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 6px;
+  color: var(--fg);
+}
+
+.roadmapItem p {
+  font-size: 14px;
+  color: var(--fg2);
+  line-height: 1.65;
+  margin: 0;
+}
+
+/* ── Contact ────────────────────────────────────────────────────────────── */
+.contactGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.contactCard {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg2);
+  transition: border-color 0.15s, background 0.15s;
+  text-decoration: none;
+  color: inherit;
+}
+
+.contactCard:hover {
+  border-color: #444;
+  background: var(--bg3);
+}
+
+.contactIcon { font-size: 24px; flex-shrink: 0; }
+
+.contactTitle {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--fg2);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.contactValue {
+  font-size: 14px;
+  color: var(--fg);
+  font-weight: 500;
+}

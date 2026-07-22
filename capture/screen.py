@@ -1,9 +1,8 @@
 import base64
-import io
-import mss
+
 import cv2
+import mss
 import numpy as np
-from PIL import Image
 
 
 def grab_screenshot(max_width: int = 1280) -> str:

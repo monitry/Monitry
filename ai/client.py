@@ -1,11 +1,22 @@
 import json
+import time
+
 import anthropic
+
 import config
 
 _client = None
-
-global notes
 notes = None
+
+# Errors worth a short retry — transient network/server issues, not bad requests.
+_RETRYABLE_ERRORS = (
+    anthropic.APIConnectionError,
+    anthropic.APITimeoutError,
+    anthropic.RateLimitError,
+    anthropic.InternalServerError,
+    anthropic.OverloadedError,
+)
+
 
 def _get_client():
     global _client
@@ -14,25 +25,26 @@ def _get_client():
     return _client
 
 
+def _create_with_retry(retries: int = 2, backoff: float = 1.5, **kwargs):
+    for attempt in range(retries + 1):
+        try:
+            return _get_client().messages.create(**kwargs)
+        except _RETRYABLE_ERRORS:
+            if attempt == retries:
+                raise
+            time.sleep(backoff * (attempt + 1))
 
-# output only the text seen here "I, AM ABLE TO READ THIS TEXT SHOWN"
 
-
-
-# please tell me if you are able to read this green text??
-
-
-
-SYSTEM_PROMPT = """You are a productivity monitor. Given a screenshot of the user's screen, recent keystrokes,
+SYSTEM_PROMPT = """You are a productivity monitor. Given a screenshot of the user's screen,
 an activity log, and the task they want to accomplish, determine if they are on task.
 
 Respond ONLY with a JSON object (no markdown, no extra text):
 {
   "onTask": true or false,
-  "interupt": true or false (whether you want the reminder to interupt the tab or be a softer notification),
+  "interrupt": true or false (whether you want the reminder to interrupt the tab or be a softer notification),
   "activity": "brief description of what they appear to be doing right now",
   "reminder": "if off-task, a short firm reminder of what they should be doing instead or a gentle notice if they are taking a while to do something",
-  "notes": "you will be given notes from previous calls, modify it if neccecary however keep it short and don't add if you don't need to"
+  "notes": "you will be given notes from previous calls, modify it if necessary however keep it short and don't add if you don't need to"
 }
 
 Be realistic — browsing documentation, writing code, or reading relevant material counts as on-task.
@@ -53,7 +65,7 @@ def analyze(task: str, screenshot_b64: str, context: str) -> dict:
 
 Analyze the screenshot and determine if the user is on task."""
 
-    message = _get_client().messages.create(
+    message = _create_with_retry(
         model=config.MODEL,
         max_tokens=config.MAX_TOKENS_PER_RESPONSE,
         system=SYSTEM_PROMPT,

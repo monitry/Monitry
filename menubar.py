@@ -1,5 +1,5 @@
 """
-Monitry menu bar app.
+Onitry menu bar app.
 
 Run this instead of gui.py — it lives in the menu bar and spawns the
 GUI window on demand. The GUI writes status to data/status.json which
@@ -12,7 +12,9 @@ import sys
 import threading
 
 import rumps
+
 import config
+from core import context as context_log
 
 PYTHON = sys.executable
 GUI_SCRIPT = os.path.join(os.path.dirname(__file__), "gui.py")
@@ -24,9 +26,9 @@ ICONS = {
 }
 
 
-class MonitryBar(rumps.App):
+class OnitryBar(rumps.App):
     def __init__(self):
-        super().__init__(name="Monitry", title=ICONS["idle"], quit_button=None)
+        super().__init__(name="Onitry", title=ICONS["idle"], quit_button=None)
 
         self._gui_proc    = None
         self._last_status = {}
@@ -35,7 +37,7 @@ class MonitryBar(rumps.App):
         self._status_item = rumps.MenuItem("Not monitoring")
         self._task_item   = rumps.MenuItem("")
         self._chat_item   = rumps.MenuItem("Ask Claude...", callback=self.open_chat)
-        self._open_item   = rumps.MenuItem("Open Monitry",  callback=self.open_window)
+        self._open_item   = rumps.MenuItem("Open Onitry",  callback=self.open_window)
         self._quit_item   = rumps.MenuItem("Quit",          callback=self.quit_app)
 
         self.menu = [
@@ -88,19 +90,15 @@ class MonitryBar(rumps.App):
         import anthropic
         import keyring
         try:
-            api_key = keyring.get_password("monitry", "anthropic_api_key")
+            api_key = keyring.get_password("onitry", "anthropic_api_key")
             if not api_key:
-                self._reply_pending = ("Error", "API key not set.\nOpen Monitry and click 'Set Key'.")
+                self._reply_pending = ("Error", "API key not set.\nOpen Onitry and click 'Set Key'.")
                 return
 
-            context = ""
-            if os.path.exists(config.CONTEXT_FILE):
-                with open(config.CONTEXT_FILE) as f:
-                    lines = [l.rstrip() for l in f if l.strip()]
-                context = "\n".join(lines[-10:])
+            context = context_log.read_tail(config.CONTEXT_FILE)
 
             system = (
-                f"You are Monitry, a productivity assistant embedded in a menu bar app. "
+                f"You are Onitry, a productivity assistant embedded in a menu bar app. "
                 f"The user is working on: {task or 'an unspecified task'}.\n"
                 f"Recent session activity:\n{context or '(none yet)'}\n\n"
                 f"Answer concisely. If asked about progress or activity, refer to the session log above."
@@ -187,4 +185,4 @@ class MonitryBar(rumps.App):
 
 if __name__ == "__main__":
     rumps.debug_mode(True)
-    MonitryBar().run()
+    OnitryBar().run()

@@ -13,9 +13,9 @@ def speak(text: str):
     subprocess.Popen(["say", "-r", "200", text])
 
 
-def alert_off_task(task: str, reminder: str, interupt: bool = True):
+def alert_off_task(task: str, reminder: str, interrupt: bool = True):
     msg = reminder if reminder else f"Get back to: {task}"
-    if interupt:
+    if interrupt:
         speak(msg)           # popup handles the visual; just add audio
     else:
-        notify("Monitry", msg, sound=False)   # silent banner only
+        notify("Onitry", msg, sound=False)   # silent banner only

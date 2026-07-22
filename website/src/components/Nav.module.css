@@ -1,0 +1,66 @@
+.nav {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 100;
+  height: var(--nav-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 40px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(12, 12, 12, 0.85);
+  backdrop-filter: blur(12px);
+}
+
+.logo {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--fg);
+  letter-spacing: -0.5px;
+}
+
+.logo span { color: var(--green); }
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  list-style: none;
+}
+
+.tab {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--fg2);
+  transition: color 0.15s, background 0.15s;
+}
+
+.tab:hover {
+  color: var(--fg);
+  background: var(--bg3);
+}
+
+.tab.active {
+  color: var(--fg);
+  background: var(--bg3);
+}
+
+.cta {
+  background: var(--green);
+  color: white;
+  border: none;
+  cursor: pointer;
+  padding: 8px 18px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+
+.cta:hover { background: var(--green-h); }
