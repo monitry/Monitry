@@ -8,6 +8,16 @@ import config
 _client = None
 notes = None
 
+# $ per 1M tokens: (input, output)
+PRICING = {
+    "claude-haiku-4-5-20251001": (1.00, 5.00),
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-opus-4-8": (5.00, 25.00),
+}
+
+_session_cost = 0.0
+_session_checks = 0
+
 # Errors worth a short retry — transient network/server issues, not bad requests.
 _RETRYABLE_ERRORS = (
     anthropic.APIConnectionError,
@@ -23,6 +33,19 @@ def _get_client():
     if _client is None:
         _client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
     return _client
+
+
+def reset_session() -> None:
+    """Clear running notes and cost — call at the start of a new monitoring session."""
+    global notes, _session_cost, _session_checks
+    notes = None
+    _session_cost = 0.0
+    _session_checks = 0
+
+
+def session_cost() -> float:
+    """Total $ spent on analyze() calls since the last reset_session()."""
+    return _session_cost
 
 
 def _create_with_retry(retries: int = 2, backoff: float = 1.5, **kwargs):
@@ -86,6 +109,12 @@ Analyze the screenshot and determine if the user is on task."""
             }
         ],
     )
+
+    global _session_cost, _session_checks
+    in_price, out_price = PRICING.get(config.MODEL, (0.0, 0.0))
+    _session_cost += (message.usage.input_tokens / 1_000_000) * in_price
+    _session_cost += (message.usage.output_tokens / 1_000_000) * out_price
+    _session_checks += 1
 
     raw = message.content[0].text.strip()
     # Strip markdown code fences if Claude wraps it anyway

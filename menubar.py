@@ -36,6 +36,7 @@ class OnitryBar(rumps.App):
 
         self._status_item = rumps.MenuItem("Not monitoring")
         self._task_item   = rumps.MenuItem("")
+        self._cost_item   = rumps.MenuItem("")
         self._chat_item   = rumps.MenuItem("Ask Claude...", callback=self.open_chat)
         self._open_item   = rumps.MenuItem("Open Onitry",  callback=self.open_window)
         self._quit_item   = rumps.MenuItem("Quit",          callback=self.quit_app)
@@ -43,6 +44,7 @@ class OnitryBar(rumps.App):
         self.menu = [
             self._status_item,
             self._task_item,
+            self._cost_item,
             None,
             self._chat_item,
             None,
@@ -170,6 +172,7 @@ class OnitryBar(rumps.App):
 
         status = data.get("status", "idle")
         task   = data.get("task",   "")
+        cost   = data.get("cost",   0.0)
 
         self.title = ICONS.get(status, "M")
 
@@ -181,6 +184,7 @@ class OnitryBar(rumps.App):
             self._status_item.title = "Not monitoring"
 
         self._task_item.title = task if task else ""
+        self._cost_item.title = f"${cost:.3f} spent" if status != "idle" else ""
 
 
 if __name__ == "__main__":

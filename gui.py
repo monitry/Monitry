@@ -4,6 +4,7 @@ import queue
 import random
 import subprocess
 import threading
+import time
 import tkinter as tk
 from tkinter import ttk
 
@@ -12,8 +13,9 @@ import keyring
 import config
 from alerts import notifier
 from core import context as context_log
+from core import settings as app_settings
 from core import status as status_file
-from core.check import run_check
+from core.check import reset_session, run_check, session_cost
 from core.interval import AdaptiveInterval
 
 KEYCHAIN_SERVICE = "onitry"
@@ -145,6 +147,24 @@ class OnitryApp:
         self._paused     = threading.Event()   # set while interrupt popup is open
         self._log_queue: queue.Queue = queue.Queue()
         self._running = False
+        self._grace_until = 0.0        # monotonic-ish: time.time() before which checks are skipped
+
+        # Session tracking (reset at the start of each monitoring run)
+        self._timeline = []            # list of (seconds, "on_task" | "off_task")
+        self._interrupt_count = 0
+        self._session_start_time = None
+
+        self._settings = app_settings.load(config.SETTINGS_FILE)
+        self.jpeg_quality = self._settings.get("jpeg_quality", 75)
+        self.grace_period = self._settings.get("grace_period_seconds", 60)
+
+        model_label = self._settings.get("model_label", list(MODELS.keys())[0])
+        self.model_var = tk.StringVar(value=model_label if model_label in MODELS else list(MODELS.keys())[0])
+
+        res_label = self._settings.get("resolution_label", list(RESOLUTIONS.keys())[0])
+        self.res_var = tk.StringVar(value=res_label if res_label in RESOLUTIONS else list(RESOLUTIONS.keys())[0])
+
+        self.task_history = self._settings.get("task_history", [])
 
         _apply_ttk_style()
         self._load_api_key()
@@ -159,54 +179,50 @@ class OnitryApp:
 
         # ── Task ──
         tk.Label(outer, text="Task:", **lbl_opts).grid(row=0, column=0, sticky="w", pady=5)
+        task_row = tk.Frame(outer, bg=BG)
+        task_row.grid(row=0, column=1, sticky="ew", pady=5)
+        task_row.columnconfigure(0, weight=1)
+
         self.task_var = tk.StringVar()
         self.task_entry = tk.Entry(
-            outer, textvariable=self.task_var,
-            width=44, relief="flat",
+            task_row, textvariable=self.task_var,
+            relief="flat",
             bg=BG2, fg=FG, insertbackground=FG,
             highlightthickness=1, highlightbackground=BG3, highlightcolor=BLUE,
         )
-        self.task_entry.grid(row=0, column=1, sticky="ew", pady=5, ipady=4)
+        self.task_entry.grid(row=0, column=0, sticky="ew", ipady=4)
         self.task_entry.focus()
 
-        # ── Model ──
-        tk.Label(outer, text="Model:", **lbl_opts).grid(row=1, column=0, sticky="w", pady=5)
-        self.model_var = tk.StringVar(value=list(MODELS.keys())[0])
-        model_menu = ttk.Combobox(
-            outer, textvariable=self.model_var,
-            values=list(MODELS.keys()),
-            state="readonly", width=42,
+        self._history_btn = _Btn(
+            task_row, text="recents", command=self._show_task_history_menu,
+            bg=BG2, fg=FG2, hover=BG3, font=("Helvetica", 11), padx=8, pady=4,
         )
-        model_menu.grid(row=1, column=1, sticky="ew", pady=5, ipady=3)
-
-        # ── Resolution ──
-        tk.Label(outer, text="Resolution:", **lbl_opts).grid(row=2, column=0, sticky="w", pady=5)
-        self.res_var = tk.StringVar(value=list(RESOLUTIONS.keys())[0])
-        res_menu = ttk.Combobox(
-            outer, textvariable=self.res_var,
-            values=list(RESOLUTIONS.keys()),
-            state="readonly", width=42,
-        )
-        res_menu.grid(row=2, column=1, sticky="ew", pady=5, ipady=3)
+        self._history_btn.grid(row=0, column=1, padx=(6, 0))
 
         # ── API Key ──
         self._key_status_var = tk.StringVar()
         self._refresh_key_status_label()
-        tk.Label(outer, text="API Key:", **lbl_opts).grid(row=3, column=0, sticky="w", pady=5)
+        tk.Label(outer, text="API Key:", **lbl_opts).grid(row=1, column=0, sticky="w", pady=5)
         key_row = tk.Frame(outer, bg=BG)
-        key_row.grid(row=3, column=1, sticky="ew", pady=5)
+        key_row.grid(row=1, column=1, sticky="ew", pady=5)
         tk.Label(key_row, textvariable=self._key_status_var, bg=BG, fg=FG2, anchor="w").pack(side="left")
         _Btn(key_row, text="Set Key", command=self._open_key_dialog,
              bg=BG, fg=BLUE, hover=BG2, font=("Helvetica", 11), padx=6, pady=2,
              ).pack(side="left", padx=(6, 0))
 
+        # ── Settings ──
+        tk.Label(outer, text="Settings:", **lbl_opts).grid(row=2, column=0, sticky="w", pady=5)
+        _Btn(outer, text="⚙ Configure", command=self._open_settings_dialog,
+             bg=BG, fg=BLUE, hover=BG2, font=("Helvetica", 11), padx=6, pady=2,
+             ).grid(row=2, column=1, sticky="w", pady=5)
+
         # ── Divider ──
-        tk.Frame(outer, bg=BG3, height=1).grid(row=4, column=0, columnspan=2, sticky="ew", pady=(8, 4))
+        tk.Frame(outer, bg=BG3, height=1).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 4))
 
         # ── Start/Stop button ──
         self.btn = _Btn(outer, text="Start Monitoring", command=self._toggle,
                         bg=GREEN, hover=GREEN_HV)
-        self.btn.grid(row=5, column=0, columnspan=2, pady=(6, 4))
+        self.btn.grid(row=4, column=0, columnspan=2, pady=(6, 4))
 
         # ── Status ──
         self.status_var = tk.StringVar(value="Idle")
@@ -215,7 +231,12 @@ class OnitryApp:
             bg=BG, fg=STATUS_COLORS["idle"],
             font=("Helvetica", 15, "bold"),
         )
-        self.status_label.grid(row=6, column=0, columnspan=2, pady=(2, 8))
+        self.status_label.grid(row=5, column=0, columnspan=2, pady=(2, 2))
+
+        # ── Session cost ──
+        self.cost_var = tk.StringVar(value="")
+        tk.Label(outer, textvariable=self.cost_var, bg=BG, fg=FG2,
+                 font=("Helvetica", 11)).grid(row=6, column=0, columnspan=2, pady=(0, 8))
 
         # ── Log (Text + dark scrollbar) ──
         log_frame = tk.Frame(outer, bg=BG2, highlightthickness=1, highlightbackground=BG3)
@@ -304,6 +325,137 @@ class OnitryApp:
         dialog.grab_set()
         entry.focus_force()
 
+    # ── Settings ─────────────────────────────────────────────────────────────
+
+    def _open_settings_dialog(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Settings")
+        dialog.resizable(False, False)
+        dialog.configure(bg=BG)
+        dialog.minsize(380, 460)
+
+        frame = tk.Frame(dialog, bg=BG, padx=18, pady=14)
+        frame.pack(fill="both", expand=True)
+
+        # Local copies so Cancel discards changes — committed to self.* only on Save.
+        tk.Label(frame, text="Model:", bg=BG, fg=FG, anchor="w").pack(fill="x", pady=(0, 4))
+        model_var = tk.StringVar(value=self.model_var.get())
+        ttk.Combobox(
+            frame, textvariable=model_var, values=list(MODELS.keys()), state="readonly",
+        ).pack(fill="x", pady=(0, 12), ipady=3)
+
+        tk.Label(frame, text="Resolution:", bg=BG, fg=FG, anchor="w").pack(fill="x", pady=(0, 4))
+        res_var = tk.StringVar(value=self.res_var.get())
+        ttk.Combobox(
+            frame, textvariable=res_var, values=list(RESOLUTIONS.keys()), state="readonly",
+        ).pack(fill="x", pady=(0, 12), ipady=3)
+
+        tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
+
+        tk.Label(frame, text="Screenshot quality (JPEG):", bg=BG, fg=FG, anchor="w",
+                 ).pack(fill="x", pady=(0, 4))
+
+        quality_var = tk.IntVar(value=self.jpeg_quality)
+        quality_lbl = tk.Label(frame, text=str(self.jpeg_quality), bg=BG, fg=FG2, anchor="w")
+        quality_lbl.pack(fill="x")
+
+        def on_slide(val):
+            quality_lbl.config(text=str(int(float(val))))
+
+        tk.Scale(
+            frame, from_=20, to=100, orient="horizontal",
+            variable=quality_var, command=on_slide, showvalue=False,
+            bg=BG, fg=FG, troughcolor=BG2, activebackground=GREEN,
+            highlightthickness=0, sliderrelief="flat",
+        ).pack(fill="x", pady=(0, 4))
+
+        tk.Label(
+            frame,
+            text="Lower = cheaper API calls, less detail. Higher = sharper text, more tokens.",
+            bg=BG, fg=FG2, font=("Helvetica", 10), wraplength=340, justify="left",
+        ).pack(fill="x", pady=(0, 14))
+
+        tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
+
+        tk.Label(frame, text="Grace period after dismissing a popup:", bg=BG, fg=FG, anchor="w",
+                 ).pack(fill="x", pady=(0, 4))
+
+        grace_var = tk.IntVar(value=self.grace_period)
+        grace_lbl = tk.Label(frame, text=f"{self.grace_period}s", bg=BG, fg=FG2, anchor="w")
+        grace_lbl.pack(fill="x")
+
+        def on_grace_slide(val):
+            grace_lbl.config(text=f"{int(float(val))}s")
+
+        tk.Scale(
+            frame, from_=0, to=300, resolution=10, orient="horizontal",
+            variable=grace_var, command=on_grace_slide, showvalue=False,
+            bg=BG, fg=FG, troughcolor=BG2, activebackground=GREEN,
+            highlightthickness=0, sliderrelief="flat",
+        ).pack(fill="x", pady=(0, 4))
+
+        tk.Label(
+            frame,
+            text="No new checks run for this long after you dismiss an off-task popup — gives you time to actually switch tasks. 0 disables it.",
+            bg=BG, fg=FG2, font=("Helvetica", 10), wraplength=340, justify="left",
+        ).pack(fill="x", pady=(0, 14))
+
+        tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
+
+        tk.Label(frame, text=f"Session cost so far: ${session_cost():.3f}",
+                 bg=BG, fg=FG2, anchor="w").pack(fill="x", pady=(0, 14))
+
+        btn_frame = tk.Frame(frame, bg=BG)
+        btn_frame.pack(anchor="w")
+
+        def save():
+            self.model_var.set(model_var.get())
+            self.res_var.set(res_var.get())
+            self.jpeg_quality = quality_var.get()
+            self.grace_period = grace_var.get()
+            app_settings.save(config.SETTINGS_FILE, {
+                "jpeg_quality": self.jpeg_quality,
+                "model_label": model_var.get(),
+                "resolution_label": res_var.get(),
+                "grace_period_seconds": self.grace_period,
+            })
+            dialog.destroy()
+
+        _Btn(btn_frame, text="Save", command=save,
+             bg=GREEN, hover=GREEN_HV, padx=12, pady=5).pack(side="left", padx=(0, 8))
+        _Btn(btn_frame, text="Cancel", command=dialog.destroy,
+             bg=BG3, fg=FG, hover="#444", padx=12, pady=5).pack(side="left")
+
+        dialog.grab_set()
+
+    # ── Task history ─────────────────────────────────────────────────────────
+
+    def _remember_task(self, task: str):
+        history = [t for t in self.task_history if t != task]
+        history.insert(0, task)
+        self.task_history = history[:8]
+        app_settings.save(config.SETTINGS_FILE, {"task_history": self.task_history})
+
+    def _show_task_history_menu(self):
+        menu = tk.Menu(
+            self.root, tearoff=0,
+            bg=BG2, fg=FG, activebackground=BG3, activeforeground=FG,
+            relief="flat", bd=0,
+        )
+        if not self.task_history:
+            menu.add_command(label="No recent tasks", state="disabled")
+        else:
+            for t in self.task_history:
+                label = t if len(t) <= 50 else t[:47] + "..."
+                menu.add_command(label=label, command=lambda t=t: self.task_var.set(t))
+
+        x = self._history_btn.winfo_rootx()
+        y = self._history_btn.winfo_rooty() + self._history_btn.winfo_height()
+        try:
+            menu.tk_popup(x, y)
+        finally:
+            menu.grab_release()
+
     # ── Toggle ────────────────────────────────────────────────────────────────
 
     def _toggle(self):
@@ -326,17 +478,28 @@ class OnitryApp:
         config.MODEL = MODELS[self.model_var.get()]
         max_width = RESOLUTIONS[self.res_var.get()]
 
+        reset_session()
+        self._timeline = []
+        self._interrupt_count = 0
+        self._session_start_time = time.time()
+        self._grace_until = 0.0
+        self.cost_var.set("Session cost: $0.000")
+
+        self._remember_task(task)
+
         self._stop_event.clear()
         self._running = True
         self.btn.relabel("Stop Monitoring")
         self.btn.recolor(RED, hover=RED_HV)
         self.task_entry.config(state="disabled")
 
-        thread = threading.Thread(target=self._monitor_loop, args=(task, max_width), daemon=True)
+        thread = threading.Thread(
+            target=self._monitor_loop, args=(task, max_width, self.jpeg_quality), daemon=True
+        )
         thread.start()
 
         self._enqueue_log(f"Started — {task}")
-        self._enqueue_log(f"Model: {config.MODEL}  |  Max interval: {MAX_INTERVAL}s")
+        self._enqueue_log(f"Model: {config.MODEL}  |  Resolution: {max_width}px  |  Max interval: {MAX_INTERVAL}s")
 
     def _stop(self):
         self._stop_event.set()
@@ -349,11 +512,12 @@ class OnitryApp:
         self._enqueue_log("Monitoring stopped.")
         status_file.write(config.STATUS_FILE, "idle")
 
+        if self._timeline:
+            self._show_session_summary()
+
     # ── Monitor loop (background thread) ─────────────────────────────────────
 
-    def _monitor_loop(self, task: str, max_width: int = 1280):
-        import time
-
+    def _monitor_loop(self, task: str, max_width: int = 1280, quality: int = 75):
         context_log.init_log(config.CONTEXT_FILE, task)
 
         interval = AdaptiveInterval(MIN_INTERVAL, MAX_INTERVAL, INTERVAL_STEP, JITTER_LO, JITTER_HI)
@@ -368,10 +532,18 @@ class OnitryApp:
             if self._stop_event.is_set():
                 break
 
+            # Grace period after a popup dismissal — give the user time to actually switch tasks
+            remaining = self._grace_until - time.time()
+            if remaining > 0:
+                self._stop_event.wait(timeout=remaining)
+                continue
+
             t0 = time.time()
             try:
                 context = context_log.read_tail(config.CONTEXT_FILE)
-                result = run_check(task, context, max_width)
+                result = run_check(task, context, max_width, quality)
+                cost = session_cost()
+                self._log_queue.put(("cost", cost))
 
                 on_task = result.get("onTask", True)
                 activity = result.get("activity", "unknown")
@@ -381,11 +553,11 @@ class OnitryApp:
                 if on_task:
                     self._enqueue_status("ON TASK", STATUS_COLORS["on_task"])
                     context_log.append(config.CONTEXT_FILE, activity)
-                    status_file.write(config.STATUS_FILE, "on_task", task, activity)
+                    status_file.write(config.STATUS_FILE, "on_task", task, activity, cost)
                 else:
                     self._enqueue_status("OFF TASK", STATUS_COLORS["off_task"])
                     context_log.append(config.CONTEXT_FILE, f"[OFF-TASK] {activity}")
-                    status_file.write(config.STATUS_FILE, "off_task", task, activity)
+                    status_file.write(config.STATUS_FILE, "off_task", task, activity, cost)
                     interval.snap_down()
                 msg = reminder if reminder else ""
                 if reminder:
@@ -393,15 +565,21 @@ class OnitryApp:
                     notifier.alert_off_task(task, reminder, interrupt)
                     if interrupt:
                         self._log_queue.put(("popup", msg))
+                        self._interrupt_count += 1
 
             except Exception as exc:
                 self._enqueue_log(f"Error: {exc}")
                 activity = "error"
-                on_task = True  # don't fire alerts on API errors
+                on_task = None  # don't fire alerts on API errors, don't count toward the timeline
 
             elapsed = time.time() - t0
             sleep_seconds, effective = interval.sample_wait(elapsed)
-            self._enqueue_log(f"{'ON TASK' if on_task else 'OFF TASK'}: {activity}  (next in {effective:.0f}s)")
+            if on_task is None:
+                status_label = "ERROR"
+            else:
+                status_label = "ON TASK" if on_task else "OFF TASK"
+                self._timeline.append((effective, "on_task" if on_task else "off_task"))
+            self._enqueue_log(f"{status_label}: {activity}  (next in {effective:.0f}s)")
             self._stop_event.wait(timeout=sleep_seconds)
 
             interval.step_up()
@@ -427,6 +605,8 @@ class OnitryApp:
                 elif item[0] == "status":
                     self.status_var.set(item[1])
                     self.status_label.config(fg=item[2])
+                elif item[0] == "cost":
+                    self.cost_var.set(f"Session cost: ${item[1]:.3f}")
                 elif item[0] == "popup":
                     self._show_popup(item[1])
         except queue.Empty:
@@ -435,6 +615,9 @@ class OnitryApp:
 
     def _dismiss_popup(self, pop):
         self._paused.clear()
+        if self.grace_period > 0:
+            self._grace_until = time.time() + self.grace_period
+            self._enqueue_log(f"Grace period — next check in {self.grace_period}s")
         if pop.winfo_exists():
             pop.destroy()
 
@@ -509,6 +692,65 @@ class OnitryApp:
         pop.focus_force()
         # Auto-dismiss after 90 s if not manually closed
         pop.after(90_000, lambda: self._dismiss_popup(pop) if pop.winfo_exists() else None)
+
+    # ── Session summary ──────────────────────────────────────────────────────
+
+    def _show_session_summary(self):
+        total = sum(duration for duration, _ in self._timeline)
+        on_seconds = sum(duration for duration, status in self._timeline if status == "on_task")
+        pct_on = (on_seconds / total * 100) if total else 0.0
+
+        elapsed = time.time() - self._session_start_time if self._session_start_time else 0
+        hours, rem = divmod(int(elapsed), 3600)
+        minutes, seconds = divmod(rem, 60)
+        if hours:
+            duration_str = f"{hours}h {minutes}m"
+        elif minutes:
+            duration_str = f"{minutes}m {seconds}s"
+        else:
+            duration_str = f"{seconds}s"
+
+        win = tk.Toplevel(self.root)
+        win.title("Session Summary")
+        win.resizable(False, False)
+        win.configure(bg=BG)
+
+        frame = tk.Frame(win, bg=BG, padx=24, pady=20)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="Session Summary", bg=BG, fg=FG,
+                 font=("Helvetica", 14, "bold")).pack(anchor="w", pady=(0, 16))
+
+        tk.Label(frame, text=duration_str, bg=BG, fg=FG,
+                 font=("Helvetica", 30, "bold")).pack(anchor="w")
+        tk.Label(frame, text="monitored", bg=BG, fg=FG2,
+                 font=("Helvetica", 11)).pack(anchor="w", pady=(0, 16))
+
+        # Timeline bar — proportional on-task/off-task segments in chronological order
+        bar_width = 360
+        canvas = tk.Canvas(frame, width=bar_width, height=16, bg=BG2, highlightthickness=0)
+        canvas.pack(fill="x")
+        x = 0.0
+        for duration, status in self._timeline:
+            w = (duration / total * bar_width) if total else 0
+            color = "#3fb950" if status == "on_task" else "#f85149"
+            canvas.create_rectangle(x, 0, x + w, 16, fill=color, width=0)
+            x += w
+
+        tk.Label(frame, text=f"{pct_on:.0f}% on task", bg=BG, fg="#3fb950",
+                 font=("Helvetica", 13, "bold")).pack(anchor="w", pady=(8, 16))
+
+        stats_row = tk.Frame(frame, bg=BG)
+        stats_row.pack(fill="x", pady=(0, 4))
+        tk.Label(stats_row, text=f"{self._interrupt_count} interruptions", bg=BG, fg=FG2,
+                 font=("Helvetica", 12)).pack(side="left")
+        tk.Label(stats_row, text=f"${session_cost():.3f} spent", bg=BG, fg=FG2,
+                 font=("Helvetica", 12)).pack(side="right")
+
+        _Btn(frame, text="Close", command=win.destroy,
+             bg=BG3, fg=FG, hover="#444", padx=16, pady=6).pack(anchor="w", pady=(20, 0))
+
+        win.grab_set()
 
 
 def main():

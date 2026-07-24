@@ -17,3 +17,6 @@ CONTEXT_MAX_CHARS = 2000
 
 # Shared status file read by the menu bar app
 STATUS_FILE = os.path.join(os.path.dirname(__file__), "data", "status.json")
+
+# Persisted app settings (e.g. JPEG quality)
+SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "data", "settings.json")
