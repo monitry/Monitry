@@ -23,6 +23,7 @@ ICONS = {
     "idle":     "M",
     "on_task":  "✓",
     "off_task": "⚠",
+    "paused":   "⏸",
 }
 
 
@@ -180,6 +181,8 @@ class OnitryBar(rumps.App):
             self._status_item.title = "On task"
         elif status == "off_task":
             self._status_item.title = "Off task ⚠"
+        elif status == "paused":
+            self._status_item.title = "Paused ⏸"
         else:
             self._status_item.title = "Not monitoring"
 

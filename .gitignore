@@ -2,3 +2,6 @@
 __pycache__/
 *.pyc
 data/
+server/.env
+server/*.db
+node_modules/

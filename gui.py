@@ -8,6 +8,7 @@ import time
 import tkinter as tk
 from tkinter import ttk
 
+import httpx
 import keyring
 
 import config
@@ -20,6 +21,7 @@ from core.interval import AdaptiveInterval
 
 KEYCHAIN_SERVICE = "onitry"
 KEYCHAIN_USER    = "anthropic_api_key"
+KEYCHAIN_MANAGED_USER = "managed_token"
 
 # ── Adaptive interval ─────────────────────────────────────────────────────────
 MAX_INTERVAL  = 120   # seconds — normal cruising speed
@@ -104,7 +106,10 @@ STATUS_COLORS = {
     "on_task": "#3fb950",
     "off_task":"#f85149",
     "stopped": FG2,
+    "paused":  "#e3b341",
 }
+
+PAUSE_MINUTES = 10
 
 
 def _apply_ttk_style():
@@ -147,12 +152,15 @@ class OnitryApp:
         self._paused     = threading.Event()   # set while interrupt popup is open
         self._log_queue: queue.Queue = queue.Queue()
         self._running = False
-        self._grace_until = 0.0        # monotonic-ish: time.time() before which checks are skipped
+        self._grace_until = 0.0        # time.time() before which checks are skipped (post-popup)
+        self._pause_until = 0.0        # time.time() before which checks are skipped (manual break)
+        self._pause_tick_id = None
 
         # Session tracking (reset at the start of each monitoring run)
         self._timeline = []            # list of (seconds, "on_task" | "off_task")
         self._interrupt_count = 0
         self._session_start_time = None
+        self._last_off_task_activity = None
 
         self._settings = app_settings.load(config.SETTINGS_FILE)
         self.jpeg_quality = self._settings.get("jpeg_quality", 75)
@@ -219,10 +227,17 @@ class OnitryApp:
         # ── Divider ──
         tk.Frame(outer, bg=BG3, height=1).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 4))
 
-        # ── Start/Stop button ──
-        self.btn = _Btn(outer, text="Start Monitoring", command=self._toggle,
+        # ── Start/Stop + Pause ──
+        control_row = tk.Frame(outer, bg=BG)
+        control_row.grid(row=4, column=0, columnspan=2, pady=(6, 4))
+
+        self.btn = _Btn(control_row, text="Start Monitoring", command=self._toggle,
                         bg=GREEN, hover=GREEN_HV)
-        self.btn.grid(row=4, column=0, columnspan=2, pady=(6, 4))
+        self.btn.pack(side="left")
+
+        self.pause_btn = _Btn(control_row, text=f"Pause {PAUSE_MINUTES}m", command=self._toggle_pause,
+                              bg=BG3, fg=FG, hover="#444", padx=14, pady=8)
+        self.pause_btn.pack(side="left", padx=(8, 0))
 
         # ── Status ──
         self.status_var = tk.StringVar(value="Idle")
@@ -233,10 +248,17 @@ class OnitryApp:
         )
         self.status_label.grid(row=5, column=0, columnspan=2, pady=(2, 2))
 
-        # ── Session cost ──
+        # ── Session cost + flag ──
+        cost_row = tk.Frame(outer, bg=BG)
+        cost_row.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+
         self.cost_var = tk.StringVar(value="")
-        tk.Label(outer, textvariable=self.cost_var, bg=BG, fg=FG2,
-                 font=("Helvetica", 11)).grid(row=6, column=0, columnspan=2, pady=(0, 8))
+        tk.Label(cost_row, textvariable=self.cost_var, bg=BG, fg=FG2,
+                 font=("Helvetica", 11)).pack(side="left")
+
+        _Btn(cost_row, text="🚩 Flag last as wrong", command=self._open_flag_dialog,
+             bg=BG, fg=FG2, hover=BG2, font=("Helvetica", 10), padx=4, pady=2,
+             ).pack(side="right")
 
         # ── Log (Text + dark scrollbar) ──
         log_frame = tk.Frame(outer, bg=BG2, highlightthickness=1, highlightbackground=BG3)
@@ -265,6 +287,11 @@ class OnitryApp:
         stored = keyring.get_password(KEYCHAIN_SERVICE, KEYCHAIN_USER)
         if stored:
             config.ANTHROPIC_API_KEY = stored
+
+        config.MANAGED_MODE = self._settings.get("managed_mode", False)
+        managed_token = keyring.get_password(KEYCHAIN_SERVICE, KEYCHAIN_MANAGED_USER)
+        if managed_token:
+            config.MANAGED_TOKEN = managed_token
 
     def _refresh_key_status_label(self):
         stored = keyring.get_password(KEYCHAIN_SERVICE, KEYCHAIN_USER)
@@ -402,6 +429,59 @@ class OnitryApp:
 
         tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
 
+        tk.Label(frame, text="Onitry Managed Subscription:", bg=BG, fg=FG, anchor="w",
+                 ).pack(fill="x", pady=(0, 4))
+
+        managed_var = tk.BooleanVar(value=config.MANAGED_MODE)
+        managed_check = tk.Checkbutton(
+            frame, text="Use my Onitry subscription instead of my own API key",
+            variable=managed_var, bg=BG, fg=FG, selectcolor=BG2,
+            activebackground=BG, activeforeground=FG,
+            highlightthickness=0, anchor="w",
+        )
+        managed_check.pack(fill="x", pady=(0, 6))
+
+        managed_token_var = tk.StringVar(value=config.MANAGED_TOKEN)
+        managed_entry = tk.Entry(
+            frame, textvariable=managed_token_var, show="•",
+            relief="flat", bg=BG2, fg=FG, insertbackground=FG,
+            highlightthickness=1, highlightbackground=BG3, highlightcolor=BLUE,
+        )
+        managed_entry.pack(fill="x", ipady=4, pady=(0, 4))
+
+        managed_status_lbl = tk.Label(frame, text="", bg=BG, fg=FG2, anchor="w", font=("Helvetica", 10))
+        managed_status_lbl.pack(fill="x", pady=(0, 4))
+
+        def verify_managed_token():
+            token = managed_token_var.get().strip()
+            if not token:
+                managed_status_lbl.config(text="Enter a token first.", fg="#f85149")
+                return
+            try:
+                resp = httpx.get(f"{config.MANAGED_API_URL}/v1/whoami", params={"token": token}, timeout=10.0)
+                if resp.status_code == 200:
+                    email = resp.json().get("email", "")
+                    managed_status_lbl.config(text=f"Valid — {email}", fg="#3fb950")
+                elif resp.status_code == 402:
+                    managed_status_lbl.config(text="Token found but subscription is inactive.", fg="#f85149")
+                else:
+                    managed_status_lbl.config(text="Token not recognized.", fg="#f85149")
+            except Exception as exc:
+                managed_status_lbl.config(text=f"Couldn't reach server: {exc}", fg="#f85149")
+
+        _Btn(frame, text="Verify token", command=verify_managed_token,
+             bg=BG3, fg=FG, hover="#444", font=("Helvetica", 10), padx=8, pady=3,
+             ).pack(anchor="w", pady=(0, 4))
+
+        tk.Label(
+            frame,
+            text="Get a token from your Onitry subscription confirmation email. "
+                 "Bring-your-own-key still works if this is off.",
+            bg=BG, fg=FG2, font=("Helvetica", 10), wraplength=340, justify="left",
+        ).pack(fill="x", pady=(0, 14))
+
+        tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
+
         tk.Label(frame, text=f"Session cost so far: ${session_cost():.3f}",
                  bg=BG, fg=FG2, anchor="w").pack(fill="x", pady=(0, 14))
 
@@ -413,11 +493,19 @@ class OnitryApp:
             self.res_var.set(res_var.get())
             self.jpeg_quality = quality_var.get()
             self.grace_period = grace_var.get()
+
+            config.MANAGED_MODE = managed_var.get()
+            token = managed_token_var.get().strip()
+            if token:
+                config.MANAGED_TOKEN = token
+                keyring.set_password(KEYCHAIN_SERVICE, KEYCHAIN_MANAGED_USER, token)
+
             app_settings.save(config.SETTINGS_FILE, {
                 "jpeg_quality": self.jpeg_quality,
                 "model_label": model_var.get(),
                 "resolution_label": res_var.get(),
                 "grace_period_seconds": self.grace_period,
+                "managed_mode": config.MANAGED_MODE,
             })
             dialog.destroy()
 
@@ -471,8 +559,11 @@ class OnitryApp:
             return
         self.task_entry.config(highlightbackground=BG3)
 
-        if not config.ANTHROPIC_API_KEY:
-            self._enqueue_log("ERROR: ANTHROPIC_API_KEY is not set — click 'Set Key'.")
+        using_managed = config.MANAGED_MODE and config.MANAGED_TOKEN
+        if not using_managed and not config.ANTHROPIC_API_KEY:
+            self._enqueue_log(
+                "ERROR: No API key set — click 'Set Key', or enable a managed subscription in Settings."
+            )
             return
 
         config.MODEL = MODELS[self.model_var.get()]
@@ -483,6 +574,7 @@ class OnitryApp:
         self._interrupt_count = 0
         self._session_start_time = time.time()
         self._grace_until = 0.0
+        self._last_off_task_activity = None
         self.cost_var.set("Session cost: $0.000")
 
         self._remember_task(task)
@@ -492,6 +584,7 @@ class OnitryApp:
         self.btn.relabel("Stop Monitoring")
         self.btn.recolor(RED, hover=RED_HV)
         self.task_entry.config(state="disabled")
+        self._resume_from_pause()  # clear any leftover pause state from a prior session
 
         thread = threading.Thread(
             target=self._monitor_loop, args=(task, max_width, self.jpeg_quality), daemon=True
@@ -505,6 +598,8 @@ class OnitryApp:
         self._stop_event.set()
         self._paused.clear()
         self._running = False
+        self._cancel_pause_tick()
+        self._pause_until = 0.0
         self.btn.relabel("Start Monitoring")
         self.btn.recolor(GREEN, hover=GREEN_HV)
         self.task_entry.config(state="normal")
@@ -514,6 +609,44 @@ class OnitryApp:
 
         if self._timeline:
             self._show_session_summary()
+
+    # ── Pause (short break) ──────────────────────────────────────────────────
+
+    def _toggle_pause(self):
+        if self._pause_until > time.time():
+            self._resume_from_pause()
+        elif self._running:
+            self._start_pause()
+
+    def _start_pause(self):
+        self._pause_until = time.time() + PAUSE_MINUTES * 60
+        self._enqueue_status("Paused", STATUS_COLORS["paused"])
+        self._enqueue_log(f"Paused — taking a break, resuming automatically in {PAUSE_MINUTES}m")
+        status_file.write(config.STATUS_FILE, "paused", self.task_var.get(), "", session_cost())
+        self._tick_pause_label()
+
+    def _tick_pause_label(self):
+        remaining = self._pause_until - time.time()
+        if remaining <= 0:
+            self._resume_from_pause()
+            return
+        self.pause_btn.relabel(f"Resume ({int(remaining // 60) + 1}m left)")
+        self._pause_tick_id = self.root.after(1000, self._tick_pause_label)
+
+    def _resume_from_pause(self):
+        was_paused = self._pause_until > time.time()
+        self._pause_until = 0.0
+        self._cancel_pause_tick()
+        self.pause_btn.relabel(f"Pause {PAUSE_MINUTES}m")
+        if was_paused:
+            self._enqueue_log("Resumed monitoring.")
+            if self._running:
+                self._enqueue_status("Resuming…", STATUS_COLORS["idle"])
+
+    def _cancel_pause_tick(self):
+        if self._pause_tick_id is not None:
+            self.root.after_cancel(self._pause_tick_id)
+            self._pause_tick_id = None
 
     # ── Monitor loop (background thread) ─────────────────────────────────────
 
@@ -531,6 +664,11 @@ class OnitryApp:
 
             if self._stop_event.is_set():
                 break
+
+            # Manual pause ("taking a break") — poll every second so Resume Now lands promptly
+            if self._pause_until > time.time():
+                self._stop_event.wait(timeout=1.0)
+                continue
 
             # Grace period after a popup dismissal — give the user time to actually switch tasks
             remaining = self._grace_until - time.time()
@@ -559,6 +697,7 @@ class OnitryApp:
                     context_log.append(config.CONTEXT_FILE, f"[OFF-TASK] {activity}")
                     status_file.write(config.STATUS_FILE, "off_task", task, activity, cost)
                     interval.snap_down()
+                    self._last_off_task_activity = activity
                 msg = reminder if reminder else ""
                 if reminder:
                     self._enqueue_log(f"  → {reminder}")
@@ -612,6 +751,65 @@ class OnitryApp:
         except queue.Empty:
             pass
         self.root.after(200, self._poll_queue)
+
+    # ── False-positive flagging ──────────────────────────────────────────────
+
+    def _open_flag_dialog(self):
+        if not self._last_off_task_activity:
+            self._enqueue_log("Nothing to flag — no off-task detections yet this session.")
+            return
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Flag False Positive")
+        dialog.resizable(False, False)
+        dialog.configure(bg=BG)
+        dialog.minsize(420, 240)
+
+        frame = tk.Frame(dialog, bg=BG, padx=18, pady=14)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="You were flagged off task for:", bg=BG, fg=FG2, anchor="w",
+                 font=("Helvetica", 10)).pack(fill="x", pady=(0, 2))
+        tk.Label(frame, text=self._last_off_task_activity, bg=BG, fg=FG, anchor="w",
+                 font=("Helvetica", 12, "bold"), wraplength=380, justify="left",
+                 ).pack(fill="x", pady=(0, 12))
+
+        tk.Label(frame, text="What were you actually doing?", bg=BG, fg=FG, anchor="w",
+                 ).pack(fill="x", pady=(0, 4))
+        text_box = tk.Text(
+            frame, height=3, relief="flat",
+            bg=BG2, fg=FG, insertbackground=FG,
+            wrap="word", padx=6, pady=6,
+            highlightthickness=1, highlightbackground=BG3, highlightcolor=BLUE,
+        )
+        text_box.pack(fill="x", pady=(0, 4))
+        text_box.focus_force()
+
+        status_lbl = tk.Label(frame, text="", bg=BG, fg=FG2, anchor="w")
+        status_lbl.pack(fill="x", pady=(4, 0))
+
+        btn_frame = tk.Frame(frame, bg=BG)
+        btn_frame.pack(anchor="w", pady=(10, 0))
+
+        def submit():
+            explanation = text_box.get("1.0", "end").strip()
+            if not explanation:
+                status_lbl.config(text="Add a quick explanation first.", fg="#f85149")
+                return
+            context_log.append(
+                config.CONTEXT_FILE,
+                f'[USER CORRECTION] You flagged "{self._last_off_task_activity}" as off-task, '
+                f"but the user says they were actually: {explanation}",
+            )
+            self._enqueue_log(f"🚩 Flagged as wrong: {explanation}")
+            dialog.destroy()
+
+        _Btn(btn_frame, text="Submit", command=submit,
+             bg=GREEN, hover=GREEN_HV, padx=12, pady=5).pack(side="left", padx=(0, 8))
+        _Btn(btn_frame, text="Cancel", command=dialog.destroy,
+             bg=BG3, fg=FG, hover="#444", padx=12, pady=5).pack(side="left")
+
+        dialog.grab_set()
 
     def _dismiss_popup(self, pop):
         self._paused.clear()
@@ -674,6 +872,14 @@ class OnitryApp:
                    bg="#3a1a1a", fg="#666666", hover="#3a1a1a",
                    font=("Helvetica", 11, "bold"), padx=12, pady=6)
         btn.pack(anchor="w")
+
+        def _flag_and_dismiss():
+            self._dismiss_popup(pop)
+            self._open_flag_dialog()
+
+        _Btn(frame, text="Not actually off task?", command=_flag_and_dismiss,
+             bg="#2a0a0a", fg="#888888", hover="#3a1010",
+             font=("Helvetica", 10), padx=4, pady=4).pack(anchor="w", pady=(8, 0))
 
         def _on_type(*_):
             typed = entry_var.get()

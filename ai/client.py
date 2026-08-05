@@ -2,6 +2,7 @@ import json
 import time
 
 import anthropic
+import httpx
 
 import config
 
@@ -75,7 +76,14 @@ Social media, YouTube, games, or unrelated browsing is off-task."""
 
 
 def analyze(task: str, screenshot_b64: str, context: str) -> dict:
-    """Send screenshot + context to Claude and return parsed JSON response."""
+    """Send screenshot + context to Claude (directly, or via the managed proxy) and
+    return the parsed JSON response."""
+    if config.MANAGED_MODE and config.MANAGED_TOKEN:
+        return _analyze_managed(task, screenshot_b64, context)
+    return _analyze_direct(task, screenshot_b64, context)
+
+
+def _analyze_direct(task: str, screenshot_b64: str, context: str) -> dict:
     global notes
 
     user_text = f"""Task the user wants to complete: {task}
@@ -123,5 +131,30 @@ Analyze the screenshot and determine if the user is on task."""
         if raw.startswith("json"):
             raw = raw[4:]
     json_raw = json.loads(raw)
+    notes = json_raw.get("notes", notes)
+    return json_raw
+
+
+def _analyze_managed(task: str, screenshot_b64: str, context: str) -> dict:
+    """Same contract as _analyze_direct, but via server/ so no Anthropic key is needed."""
+    global notes, _session_cost, _session_checks
+
+    resp = httpx.post(
+        f"{config.MANAGED_API_URL}/v1/analyze",
+        json={
+            "token": config.MANAGED_TOKEN,
+            "task": task,
+            "screenshot_b64": screenshot_b64,
+            "context": context,
+            "notes": notes or "",
+            "model": config.MODEL,
+        },
+        timeout=30.0,
+    )
+    resp.raise_for_status()
+    json_raw = resp.json()
+
+    _session_cost += json_raw.get("cost", 0.0)
+    _session_checks += 1
     notes = json_raw.get("notes", notes)
     return json_raw
