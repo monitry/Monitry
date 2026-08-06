@@ -6,14 +6,18 @@ import subprocess
 import threading
 import time
 import tkinter as tk
+import webbrowser
 from tkinter import ttk
 
 import httpx
 import keyring
 
 import config
+from ai.client import DailyLimitReached
 from alerts import notifier
+from core import auth as google_auth
 from core import context as context_log
+from core import license as byok_license
 from core import settings as app_settings
 from core import status as status_file
 from core.check import reset_session, run_check, session_cost
@@ -175,7 +179,7 @@ class OnitryApp:
         self.task_history = self._settings.get("task_history", [])
 
         _apply_ttk_style()
-        self._load_api_key()
+        self._load_credentials()
         self._build_ui()
         self._poll_queue()
 
@@ -183,12 +187,13 @@ class OnitryApp:
         outer = tk.Frame(self.root, bg=BG, padx=18, pady=14)
         outer.pack(fill="both", expand=True)
 
-        lbl_opts = dict(bg=BG, fg=FG, anchor="w", width=8)
+        self._lbl_opts = dict(bg=BG, fg=FG, anchor="w", width=8)
+        r = 0
 
         # ── Task ──
-        tk.Label(outer, text="Task:", **lbl_opts).grid(row=0, column=0, sticky="w", pady=5)
+        tk.Label(outer, text="Task:", **self._lbl_opts).grid(row=r, column=0, sticky="w", pady=5)
         task_row = tk.Frame(outer, bg=BG)
-        task_row.grid(row=0, column=1, sticky="ew", pady=5)
+        task_row.grid(row=r, column=1, sticky="ew", pady=5)
         task_row.columnconfigure(0, weight=1)
 
         self.task_var = tk.StringVar()
@@ -206,30 +211,31 @@ class OnitryApp:
             bg=BG2, fg=FG2, hover=BG3, font=("Helvetica", 11), padx=8, pady=4,
         )
         self._history_btn.grid(row=0, column=1, padx=(6, 0))
+        r += 1
 
-        # ── API Key ──
-        self._key_status_var = tk.StringVar()
-        self._refresh_key_status_label()
-        tk.Label(outer, text="API Key:", **lbl_opts).grid(row=1, column=0, sticky="w", pady=5)
-        key_row = tk.Frame(outer, bg=BG)
-        key_row.grid(row=1, column=1, sticky="ew", pady=5)
-        tk.Label(key_row, textvariable=self._key_status_var, bg=BG, fg=FG2, anchor="w").pack(side="left")
-        _Btn(key_row, text="Set Key", command=self._open_key_dialog,
-             bg=BG, fg=BLUE, hover=BG2, font=("Helvetica", 11), padx=6, pady=2,
-             ).pack(side="left", padx=(6, 0))
+        # ── Credentials — differ by edition ──
+        if config.EDITION in ("dev", "byok"):
+            r = self._build_api_key_row(outer, r)
+        if config.EDITION == "byok":
+            r = self._build_license_row(outer, r)
+        if config.EDITION == "managed":
+            r = self._build_google_row(outer, r)
 
         # ── Settings ──
-        tk.Label(outer, text="Settings:", **lbl_opts).grid(row=2, column=0, sticky="w", pady=5)
+        tk.Label(outer, text="Settings:", **self._lbl_opts).grid(row=r, column=0, sticky="w", pady=5)
         _Btn(outer, text="⚙ Configure", command=self._open_settings_dialog,
              bg=BG, fg=BLUE, hover=BG2, font=("Helvetica", 11), padx=6, pady=2,
-             ).grid(row=2, column=1, sticky="w", pady=5)
+             ).grid(row=r, column=1, sticky="w", pady=5)
+        r += 1
 
         # ── Divider ──
-        tk.Frame(outer, bg=BG3, height=1).grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 4))
+        tk.Frame(outer, bg=BG3, height=1).grid(row=r, column=0, columnspan=2, sticky="ew", pady=(8, 4))
+        r += 1
 
         # ── Start/Stop + Pause ──
         control_row = tk.Frame(outer, bg=BG)
-        control_row.grid(row=4, column=0, columnspan=2, pady=(6, 4))
+        control_row.grid(row=r, column=0, columnspan=2, pady=(6, 4))
+        r += 1
 
         self.btn = _Btn(control_row, text="Start Monitoring", command=self._toggle,
                         bg=GREEN, hover=GREEN_HV)
@@ -246,11 +252,13 @@ class OnitryApp:
             bg=BG, fg=STATUS_COLORS["idle"],
             font=("Helvetica", 15, "bold"),
         )
-        self.status_label.grid(row=5, column=0, columnspan=2, pady=(2, 2))
+        self.status_label.grid(row=r, column=0, columnspan=2, pady=(2, 2))
+        r += 1
 
-        # ── Session cost + flag ──
+        # ── Session cost/usage + flag ──
         cost_row = tk.Frame(outer, bg=BG)
-        cost_row.grid(row=6, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        cost_row.grid(row=r, column=0, columnspan=2, sticky="ew", pady=(0, 8))
+        r += 1
 
         self.cost_var = tk.StringVar(value="")
         tk.Label(cost_row, textvariable=self.cost_var, bg=BG, fg=FG2,
@@ -262,7 +270,7 @@ class OnitryApp:
 
         # ── Log (Text + dark scrollbar) ──
         log_frame = tk.Frame(outer, bg=BG2, highlightthickness=1, highlightbackground=BG3)
-        log_frame.grid(row=7, column=0, columnspan=2, sticky="nsew", pady=(0, 4))
+        log_frame.grid(row=r, column=0, columnspan=2, sticky="nsew", pady=(0, 4))
 
         self.log = tk.Text(
             log_frame, width=56, height=13,
@@ -281,17 +289,86 @@ class OnitryApp:
 
         outer.columnconfigure(1, weight=1)
 
-    # ── API Key (Keychain) ────────────────────────────────────────────────────
+    def _build_api_key_row(self, outer, r):
+        self._key_status_var = tk.StringVar()
+        self._refresh_key_status_label()
+        tk.Label(outer, text="API Key:", **self._lbl_opts).grid(row=r, column=0, sticky="w", pady=5)
+        key_row = tk.Frame(outer, bg=BG)
+        key_row.grid(row=r, column=1, sticky="ew", pady=5)
+        tk.Label(key_row, textvariable=self._key_status_var, bg=BG, fg=FG2, anchor="w").pack(side="left")
+        _Btn(key_row, text="Set Key", command=self._open_key_dialog,
+             bg=BG, fg=BLUE, hover=BG2, font=("Helvetica", 11), padx=6, pady=2,
+             ).pack(side="left", padx=(6, 0))
+        return r + 1
 
-    def _load_api_key(self):
+    def _build_license_row(self, outer, r):
+        self._license_status_var = tk.StringVar()
+        self._refresh_license_status_label()
+        tk.Label(outer, text="License:", **self._lbl_opts).grid(row=r, column=0, sticky="w", pady=5)
+        license_row = tk.Frame(outer, bg=BG)
+        license_row.grid(row=r, column=1, sticky="ew", pady=5)
+        tk.Label(license_row, textvariable=self._license_status_var, bg=BG, fg=FG2, anchor="w").pack(side="left")
+        _Btn(license_row, text="Enter Key", command=self._open_license_dialog,
+             bg=BG, fg=BLUE, hover=BG2, font=("Helvetica", 11), padx=6, pady=2,
+             ).pack(side="left", padx=(6, 0))
+        return r + 1
+
+    def _build_google_row(self, outer, r):
+        self._google_status_var = tk.StringVar()
+        self._refresh_google_status_label()
+        tk.Label(outer, text="Account:", **self._lbl_opts).grid(row=r, column=0, sticky="w", pady=5)
+        google_row = tk.Frame(outer, bg=BG)
+        google_row.grid(row=r, column=1, sticky="ew", pady=5)
+        tk.Label(google_row, textvariable=self._google_status_var, bg=BG, fg=FG2, anchor="w").pack(side="left")
+        self._google_btn = _Btn(google_row, text="Sign in with Google", command=self._start_google_signin,
+             bg=BG, fg=BLUE, hover=BG2, font=("Helvetica", 11), padx=6, pady=2)
+        self._google_btn.pack(side="left", padx=(6, 0))
+        return r + 1
+
+    # ── Credentials (Keychain + server) ──────────────────────────────────────
+
+    def _load_credentials(self):
         stored = keyring.get_password(KEYCHAIN_SERVICE, KEYCHAIN_USER)
         if stored:
             config.ANTHROPIC_API_KEY = stored
 
-        config.MANAGED_MODE = self._settings.get("managed_mode", False)
-        managed_token = keyring.get_password(KEYCHAIN_SERVICE, KEYCHAIN_MANAGED_USER)
-        if managed_token:
-            config.MANAGED_TOKEN = managed_token
+        if config.EDITION == "dev":
+            config.MANAGED_MODE = self._settings.get("managed_mode", False)
+            managed_token = keyring.get_password(KEYCHAIN_SERVICE, KEYCHAIN_MANAGED_USER)
+            if managed_token:
+                config.MANAGED_TOKEN = managed_token
+
+        if config.EDITION == "byok":
+            license_token = keyring.get_password(KEYCHAIN_SERVICE, "byok_license")
+            if license_token:
+                config.BYOK_LICENSE_TOKEN = license_token
+                config.BYOK_LICENSE_VERIFIED = self._settings.get("byok_license_verified", False)
+
+        if config.EDITION == "managed":
+            config.MANAGED_MODE = True
+            managed_token = keyring.get_password(KEYCHAIN_SERVICE, KEYCHAIN_MANAGED_USER)
+            if managed_token:
+                config.MANAGED_TOKEN = managed_token
+                self._refresh_managed_account()
+
+    def _refresh_managed_account(self) -> bool:
+        """Synchronous whoami call — cheap, used at startup and after sign-in.
+        Returns True if the stored token is still valid."""
+        try:
+            resp = httpx.get(
+                f"{config.MANAGED_API_URL}/v1/whoami",
+                params={"token": config.MANAGED_TOKEN}, timeout=10.0,
+            )
+            if resp.status_code != 200:
+                return False
+            body = resp.json()
+            config.MANAGED_PLAN = body["plan"]
+            config.MANAGED_EMAIL = body["email"] or ""
+            config.MANAGED_DAILY_CAP_SECONDS = body["daily_cap_seconds"]
+            config.MANAGED_DAILY_REMAINING_SECONDS = body["daily_remaining_seconds"]
+            return True
+        except httpx.HTTPError:
+            return False
 
     def _refresh_key_status_label(self):
         stored = keyring.get_password(KEYCHAIN_SERVICE, KEYCHAIN_USER)
@@ -302,6 +379,146 @@ class OnitryApp:
             self._key_status_var.set("From environment variable")
         else:
             self._key_status_var.set("Not set")
+
+    def _refresh_license_status_label(self):
+        if config.BYOK_LICENSE_TOKEN and config.BYOK_LICENSE_VERIFIED:
+            self._license_status_var.set("Verified ✓")
+        elif config.BYOK_LICENSE_TOKEN:
+            self._license_status_var.set("Saved, not verified")
+        else:
+            self._license_status_var.set("Not set")
+
+    def _refresh_google_status_label(self):
+        if config.MANAGED_TOKEN and config.MANAGED_EMAIL:
+            plan_label = "Pro" if config.MANAGED_PLAN == "managed_paid" else "Free"
+            self._google_status_var.set(f"{config.MANAGED_EMAIL} ({plan_label})")
+            self._google_btn.relabel("Switch Account")
+        elif config.MANAGED_TOKEN:
+            self._google_status_var.set("Signed in — reconnecting…")
+        else:
+            self._google_status_var.set("Not signed in")
+
+    # ── BYOK license ──────────────────────────────────────────────────────────
+
+    def _open_license_dialog(self):
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Enter License Key")
+        dialog.resizable(False, False)
+        dialog.configure(bg=BG)
+        dialog.minsize(420, 160)
+
+        frame = tk.Frame(dialog, bg=BG, padx=18, pady=14)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="License Key (from your $30 purchase):", bg=BG, fg=FG, anchor="w",
+                 ).pack(fill="x", pady=(0, 6))
+        entry = tk.Entry(
+            frame, width=50, relief="flat",
+            bg=BG2, fg=FG, insertbackground=FG,
+            highlightthickness=1, highlightbackground=BG3, highlightcolor=BLUE,
+        )
+        entry.pack(fill="x", ipady=4, pady=(0, 4))
+        if config.BYOK_LICENSE_TOKEN:
+            entry.insert(0, config.BYOK_LICENSE_TOKEN)
+
+        status_lbl = tk.Label(frame, text="", bg=BG, fg=FG2, anchor="w")
+        status_lbl.pack(fill="x")
+
+        btn_frame = tk.Frame(frame, bg=BG)
+        btn_frame.pack(pady=(10, 0))
+
+        def verify():
+            key = entry.get().strip()
+            if not key:
+                status_lbl.config(text="Key cannot be empty.", fg="#f85149")
+                return
+            status_lbl.config(text="Verifying…", fg=FG2)
+            result_queue: queue.Queue = queue.Queue()
+            threading.Thread(target=self._verify_license_bg, args=(key, result_queue), daemon=True).start()
+            self._poll_license_result(dialog, status_lbl, result_queue)
+
+        _Btn(btn_frame, text="Verify & Save", command=verify,
+             bg=GREEN, hover=GREEN_HV, padx=12, pady=5).pack(side="left", padx=(0, 8))
+        _Btn(btn_frame, text="Cancel", command=dialog.destroy,
+             bg=BG3, fg=FG, hover="#444", padx=12, pady=5).pack(side="left")
+
+        entry.bind("<Return>", lambda _: verify())
+        dialog.grab_set()
+        entry.focus_force()
+
+    def _verify_license_bg(self, key: str, result_queue: queue.Queue):
+        try:
+            valid = byok_license.verify(config.MANAGED_API_URL, key)
+            result_queue.put(("done", valid, key))
+        except byok_license.LicenseCheckFailed as exc:
+            result_queue.put(("error", str(exc), key))
+
+    def _poll_license_result(self, dialog, status_lbl, result_queue: queue.Queue):
+        if not dialog.winfo_exists():
+            return
+        try:
+            _kind, *rest = result_queue.get_nowait()
+        except queue.Empty:
+            dialog.after(150, lambda: self._poll_license_result(dialog, status_lbl, result_queue))
+            return
+
+        if _kind == "error":
+            status_lbl.config(text=f"Couldn't reach server: {rest[0]}", fg="#f85149")
+            return
+
+        valid, key = rest
+        if valid:
+            config.BYOK_LICENSE_TOKEN = key
+            config.BYOK_LICENSE_VERIFIED = True
+            keyring.set_password(KEYCHAIN_SERVICE, "byok_license", key)
+            app_settings.save(config.SETTINGS_FILE, {"byok_license_verified": True})
+            self._refresh_license_status_label()
+            status_lbl.config(text="Verified ✓", fg="#3fb950")
+            dialog.after(800, dialog.destroy)
+        else:
+            config.BYOK_LICENSE_VERIFIED = False
+            status_lbl.config(text="Invalid license key.", fg="#f85149")
+
+    # ── Google sign-in (managed edition) ─────────────────────────────────────
+
+    def _start_google_signin(self):
+        self._google_status_var.set("Opening browser…")
+        self._google_btn.relabel("Signing in…")
+        result_queue: queue.Queue = queue.Queue()
+        threading.Thread(target=self._google_signin_bg, args=(result_queue,), daemon=True).start()
+        self._poll_google_signin(result_queue)
+
+    def _google_signin_bg(self, result_queue: queue.Queue):
+        try:
+            id_token = google_auth.login_with_google(config.GOOGLE_CLIENT_ID, config.GOOGLE_CLIENT_SECRET)
+            resp = httpx.post(
+                f"{config.MANAGED_API_URL}/v1/auth/google", json={"id_token": id_token}, timeout=15.0
+            )
+            resp.raise_for_status()
+            result_queue.put(("done", resp.json()))
+        except (google_auth.GoogleLoginError, httpx.HTTPError) as exc:
+            result_queue.put(("error", str(exc)))
+
+    def _poll_google_signin(self, result_queue: queue.Queue):
+        try:
+            kind, payload = result_queue.get_nowait()
+        except queue.Empty:
+            self.root.after(200, lambda: self._poll_google_signin(result_queue))
+            return
+
+        if kind == "error":
+            self._google_status_var.set("Sign-in failed")
+            self._google_btn.relabel("Sign in with Google")
+            self._enqueue_log(f"Google sign-in failed: {payload}")
+            return
+
+        config.MANAGED_TOKEN = payload["token"]
+        config.MANAGED_PLAN = payload["plan"]
+        config.MANAGED_EMAIL = payload["email"] or ""
+        config.MANAGED_DAILY_CAP_SECONDS = payload["daily_cap_seconds"]
+        keyring.set_password(KEYCHAIN_SERVICE, KEYCHAIN_MANAGED_USER, config.MANAGED_TOKEN)
+        self._refresh_google_status_label()
+        self._enqueue_log(f"Signed in as {config.MANAGED_EMAIL} ({config.MANAGED_PLAN})")
 
     def _open_key_dialog(self):
         dialog = tk.Toplevel(self.root)
@@ -365,42 +582,59 @@ class OnitryApp:
         frame.pack(fill="both", expand=True)
 
         # Local copies so Cancel discards changes — committed to self.* only on Save.
-        tk.Label(frame, text="Model:", bg=BG, fg=FG, anchor="w").pack(fill="x", pady=(0, 4))
         model_var = tk.StringVar(value=self.model_var.get())
-        ttk.Combobox(
-            frame, textvariable=model_var, values=list(MODELS.keys()), state="readonly",
-        ).pack(fill="x", pady=(0, 12), ipady=3)
+        if config.EDITION == "dev":
+            tk.Label(frame, text="Model:", bg=BG, fg=FG, anchor="w").pack(fill="x", pady=(0, 4))
+            ttk.Combobox(
+                frame, textvariable=model_var, values=list(MODELS.keys()), state="readonly",
+            ).pack(fill="x", pady=(0, 12), ipady=3)
 
-        tk.Label(frame, text="Resolution:", bg=BG, fg=FG, anchor="w").pack(fill="x", pady=(0, 4))
         res_var = tk.StringVar(value=self.res_var.get())
-        ttk.Combobox(
-            frame, textvariable=res_var, values=list(RESOLUTIONS.keys()), state="readonly",
-        ).pack(fill="x", pady=(0, 12), ipady=3)
+        if config.EDITION in ("dev", "byok"):
+            tk.Label(frame, text="Resolution:", bg=BG, fg=FG, anchor="w").pack(fill="x", pady=(0, 4))
+            ttk.Combobox(
+                frame, textvariable=res_var, values=list(RESOLUTIONS.keys()), state="readonly",
+            ).pack(fill="x", pady=(0, 12), ipady=3)
+        elif config.EDITION == "managed" and config.MANAGED_PLAN == "managed_paid":
+            tk.Label(frame, text="Detail level:", bg=BG, fg=FG, anchor="w").pack(fill="x", pady=(0, 4))
+            paid_choices = ["800px  — medium", "1280px — high detail"]
+            if res_var.get() not in paid_choices:
+                res_var.set(paid_choices[0])
+            ttk.Combobox(
+                frame, textvariable=res_var, values=paid_choices, state="readonly",
+            ).pack(fill="x", pady=(0, 12), ipady=3)
+        elif config.EDITION == "managed":
+            tk.Label(frame, text="Detail level:", bg=BG, fg=FG, anchor="w").pack(fill="x", pady=(0, 4))
+            tk.Label(frame, text="Medium (free plan — upgrade below for High)",
+                     bg=BG, fg=FG2, anchor="w").pack(fill="x", pady=(0, 12))
 
-        tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
+        if config.EDITION in ("dev", "byok"):
+            tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
 
-        tk.Label(frame, text="Screenshot quality (JPEG):", bg=BG, fg=FG, anchor="w",
-                 ).pack(fill="x", pady=(0, 4))
+            tk.Label(frame, text="Screenshot quality (JPEG):", bg=BG, fg=FG, anchor="w",
+                     ).pack(fill="x", pady=(0, 4))
 
-        quality_var = tk.IntVar(value=self.jpeg_quality)
-        quality_lbl = tk.Label(frame, text=str(self.jpeg_quality), bg=BG, fg=FG2, anchor="w")
-        quality_lbl.pack(fill="x")
+            quality_var = tk.IntVar(value=self.jpeg_quality)
+            quality_lbl = tk.Label(frame, text=str(self.jpeg_quality), bg=BG, fg=FG2, anchor="w")
+            quality_lbl.pack(fill="x")
 
-        def on_slide(val):
-            quality_lbl.config(text=str(int(float(val))))
+            def on_slide(val):
+                quality_lbl.config(text=str(int(float(val))))
 
-        tk.Scale(
-            frame, from_=20, to=100, orient="horizontal",
-            variable=quality_var, command=on_slide, showvalue=False,
-            bg=BG, fg=FG, troughcolor=BG2, activebackground=GREEN,
-            highlightthickness=0, sliderrelief="flat",
-        ).pack(fill="x", pady=(0, 4))
+            tk.Scale(
+                frame, from_=20, to=100, orient="horizontal",
+                variable=quality_var, command=on_slide, showvalue=False,
+                bg=BG, fg=FG, troughcolor=BG2, activebackground=GREEN,
+                highlightthickness=0, sliderrelief="flat",
+            ).pack(fill="x", pady=(0, 4))
 
-        tk.Label(
-            frame,
-            text="Lower = cheaper API calls, less detail. Higher = sharper text, more tokens.",
-            bg=BG, fg=FG2, font=("Helvetica", 10), wraplength=340, justify="left",
-        ).pack(fill="x", pady=(0, 14))
+            tk.Label(
+                frame,
+                text="Lower = cheaper API calls, less detail. Higher = sharper text, more tokens.",
+                bg=BG, fg=FG2, font=("Helvetica", 10), wraplength=340, justify="left",
+            ).pack(fill="x", pady=(0, 14))
+        else:
+            quality_var = tk.IntVar(value=self.jpeg_quality)  # unused by UI, kept for save() below
 
         tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
 
@@ -429,84 +663,71 @@ class OnitryApp:
 
         tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
 
-        tk.Label(frame, text="Onitry Managed Subscription:", bg=BG, fg=FG, anchor="w",
-                 ).pack(fill="x", pady=(0, 4))
-
+        # Dev-only: a way to test the managed proxy path without a real Google account.
         managed_var = tk.BooleanVar(value=config.MANAGED_MODE)
-        managed_check = tk.Checkbutton(
-            frame, text="Use my Onitry subscription instead of my own API key",
-            variable=managed_var, bg=BG, fg=FG, selectcolor=BG2,
-            activebackground=BG, activeforeground=FG,
-            highlightthickness=0, anchor="w",
-        )
-        managed_check.pack(fill="x", pady=(0, 6))
-
         managed_token_var = tk.StringVar(value=config.MANAGED_TOKEN)
-        managed_entry = tk.Entry(
-            frame, textvariable=managed_token_var, show="•",
-            relief="flat", bg=BG2, fg=FG, insertbackground=FG,
-            highlightthickness=1, highlightbackground=BG3, highlightcolor=BLUE,
-        )
-        managed_entry.pack(fill="x", ipady=4, pady=(0, 4))
+        if config.EDITION == "dev":
+            tk.Label(frame, text="Managed proxy (dev testing):", bg=BG, fg=FG, anchor="w",
+                     ).pack(fill="x", pady=(0, 4))
+            tk.Checkbutton(
+                frame, text="Route analyze() through server/ instead of my own API key",
+                variable=managed_var, bg=BG, fg=FG, selectcolor=BG2,
+                activebackground=BG, activeforeground=FG,
+                highlightthickness=0, anchor="w",
+            ).pack(fill="x", pady=(0, 6))
+            tk.Entry(
+                frame, textvariable=managed_token_var, show="•",
+                relief="flat", bg=BG2, fg=FG, insertbackground=FG,
+                highlightthickness=1, highlightbackground=BG3, highlightcolor=BLUE,
+            ).pack(fill="x", ipady=4, pady=(0, 14))
 
-        managed_status_lbl = tk.Label(frame, text="", bg=BG, fg=FG2, anchor="w", font=("Helvetica", 10))
-        managed_status_lbl.pack(fill="x", pady=(0, 4))
-
-        def verify_managed_token():
-            token = managed_token_var.get().strip()
-            if not token:
-                managed_status_lbl.config(text="Enter a token first.", fg="#f85149")
-                return
-            try:
-                resp = httpx.get(f"{config.MANAGED_API_URL}/v1/whoami", params={"token": token}, timeout=10.0)
-                if resp.status_code == 200:
-                    email = resp.json().get("email", "")
-                    managed_status_lbl.config(text=f"Valid — {email}", fg="#3fb950")
-                elif resp.status_code == 402:
-                    managed_status_lbl.config(text="Token found but subscription is inactive.", fg="#f85149")
-                else:
-                    managed_status_lbl.config(text="Token not recognized.", fg="#f85149")
-            except Exception as exc:
-                managed_status_lbl.config(text=f"Couldn't reach server: {exc}", fg="#f85149")
-
-        _Btn(frame, text="Verify token", command=verify_managed_token,
-             bg=BG3, fg=FG, hover="#444", font=("Helvetica", 10), padx=8, pady=3,
-             ).pack(anchor="w", pady=(0, 4))
-
-        tk.Label(
-            frame,
-            text="Get a token from your Onitry subscription confirmation email. "
-                 "Bring-your-own-key still works if this is off.",
-            bg=BG, fg=FG2, font=("Helvetica", 10), wraplength=340, justify="left",
-        ).pack(fill="x", pady=(0, 14))
+        elif config.EDITION == "managed" and config.MANAGED_PLAN == "managed_free":
+            tk.Label(frame, text="Onitry Pro — $19/mo:", bg=BG, fg=FG, anchor="w",
+                     ).pack(fill="x", pady=(0, 4))
+            tk.Label(
+                frame, text="10 hours/day instead of 1, and High detail mode.",
+                bg=BG, fg=FG2, font=("Helvetica", 10), wraplength=340, justify="left",
+            ).pack(fill="x", pady=(0, 6))
+            _Btn(frame, text="Upgrade", command=self._open_upgrade_checkout,
+                 bg=GREEN, hover=GREEN_HV, font=("Helvetica", 11), padx=10, pady=4,
+                 ).pack(anchor="w", pady=(0, 14))
 
         tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
 
-        tk.Label(frame, text=f"Session cost so far: ${session_cost():.3f}",
-                 bg=BG, fg=FG2, anchor="w").pack(fill="x", pady=(0, 14))
+        if config.EDITION == "managed":
+            remaining_min = int(config.MANAGED_DAILY_REMAINING_SECONDS // 60)
+            cap_min = int(config.MANAGED_DAILY_CAP_SECONDS // 60)
+            tk.Label(frame, text=f"Today's remaining time: {remaining_min}m / {cap_min}m",
+                     bg=BG, fg=FG2, anchor="w").pack(fill="x", pady=(0, 14))
+        else:
+            tk.Label(frame, text=f"Session cost so far: ${session_cost():.3f}",
+                     bg=BG, fg=FG2, anchor="w").pack(fill="x", pady=(0, 14))
 
         btn_frame = tk.Frame(frame, bg=BG)
         btn_frame.pack(anchor="w")
 
         def save():
-            self.model_var.set(model_var.get())
+            if config.EDITION == "dev":
+                self.model_var.set(model_var.get())
             self.res_var.set(res_var.get())
             self.jpeg_quality = quality_var.get()
             self.grace_period = grace_var.get()
 
-            config.MANAGED_MODE = managed_var.get()
-            token = managed_token_var.get().strip()
-            if token:
-                config.MANAGED_TOKEN = token
-                keyring.set_password(KEYCHAIN_SERVICE, KEYCHAIN_MANAGED_USER, token)
-
-            app_settings.save(config.SETTINGS_FILE, {
+            settings_to_save = {
                 "jpeg_quality": self.jpeg_quality,
-                "model_label": model_var.get(),
                 "resolution_label": res_var.get(),
                 "grace_period_seconds": self.grace_period,
-                "managed_mode": config.MANAGED_MODE,
-            })
+            }
+            if config.EDITION == "dev":
+                settings_to_save["model_label"] = model_var.get()
+                config.MANAGED_MODE = managed_var.get()
+                token = managed_token_var.get().strip()
+                if token:
+                    config.MANAGED_TOKEN = token
+                    keyring.set_password(KEYCHAIN_SERVICE, KEYCHAIN_MANAGED_USER, token)
+                settings_to_save["managed_mode"] = config.MANAGED_MODE
+
+            app_settings.save(config.SETTINGS_FILE, settings_to_save)
             dialog.destroy()
 
         _Btn(btn_frame, text="Save", command=save,
@@ -515,6 +736,22 @@ class OnitryApp:
              bg=BG3, fg=FG, hover="#444", padx=12, pady=5).pack(side="left")
 
         dialog.grab_set()
+
+    def _open_upgrade_checkout(self):
+        try:
+            resp = httpx.post(
+                f"{config.MANAGED_API_URL}/v1/checkout/upgrade",
+                json={
+                    "success_url": "https://onitry.app/upgrade-success",
+                    "cancel_url": "https://onitry.app/upgrade-cancelled",
+                    "subscriber_token": config.MANAGED_TOKEN,
+                },
+                timeout=15.0,
+            )
+            resp.raise_for_status()
+            webbrowser.open(resp.json()["url"])
+        except httpx.HTTPError as exc:
+            self._enqueue_log(f"Couldn't start checkout: {exc}")
 
     # ── Task history ─────────────────────────────────────────────────────────
 
@@ -552,6 +789,44 @@ class OnitryApp:
         else:
             self._start()
 
+    def _resolve_start_settings(self) -> int | None:
+        """Applies per-edition gating + forces model/resolution. Returns max_width, or
+        None (having already logged why) if a credential check failed."""
+        if config.EDITION == "dev":
+            using_managed = config.MANAGED_MODE and config.MANAGED_TOKEN
+            if not using_managed and not config.ANTHROPIC_API_KEY:
+                self._enqueue_log(
+                    "ERROR: No API key set — click 'Set Key', or enable a managed subscription in Settings."
+                )
+                return None
+            config.MODEL = MODELS[self.model_var.get()]
+            return RESOLUTIONS[self.res_var.get()]
+
+        if config.EDITION == "byok":
+            if not config.ANTHROPIC_API_KEY:
+                self._enqueue_log("ERROR: No API key set — click 'Set Key'.")
+                return None
+            if not config.BYOK_LICENSE_VERIFIED:
+                self._enqueue_log("ERROR: License not verified — click 'Enter Key' under License.")
+                return None
+            config.MANAGED_MODE = False
+            config.MODEL = config.HAIKU_MODEL
+            return RESOLUTIONS[self.res_var.get()]
+
+        # managed
+        if not config.MANAGED_TOKEN:
+            self._enqueue_log("ERROR: Sign in with Google first.")
+            return None
+        if not self._refresh_managed_account():
+            self._enqueue_log("ERROR: Couldn't verify your account — check your connection and try again.")
+            return None
+        self._refresh_google_status_label()
+        config.MANAGED_MODE = True
+        config.MODEL = config.HAIKU_MODEL
+        if config.MANAGED_PLAN == "managed_paid":
+            return RESOLUTIONS.get(self.res_var.get(), 800)
+        return 800  # free plan — always medium, never the picker's current value
+
     def _start(self):
         task = self.task_var.get().strip()
         if not task:
@@ -559,15 +834,9 @@ class OnitryApp:
             return
         self.task_entry.config(highlightbackground=BG3)
 
-        using_managed = config.MANAGED_MODE and config.MANAGED_TOKEN
-        if not using_managed and not config.ANTHROPIC_API_KEY:
-            self._enqueue_log(
-                "ERROR: No API key set — click 'Set Key', or enable a managed subscription in Settings."
-            )
-            return
-
-        config.MODEL = MODELS[self.model_var.get()]
-        max_width = RESOLUTIONS[self.res_var.get()]
+        max_width = self._resolve_start_settings()
+        if max_width is None:
+            return  # a gating check already logged why
 
         reset_session()
         self._timeline = []
@@ -575,7 +844,11 @@ class OnitryApp:
         self._session_start_time = time.time()
         self._grace_until = 0.0
         self._last_off_task_activity = None
-        self.cost_var.set("Session cost: $0.000")
+        if config.EDITION == "managed":
+            remaining_min = int(config.MANAGED_DAILY_REMAINING_SECONDS // 60)
+            self.cost_var.set(f"Time remaining today: {remaining_min}m")
+        else:
+            self.cost_var.set("Session cost: $0.000")
 
         self._remember_task(task)
 
@@ -656,6 +929,7 @@ class OnitryApp:
         interval = AdaptiveInterval(MIN_INTERVAL, MAX_INTERVAL, INTERVAL_STEP, JITTER_LO, JITTER_HI)
 
         self._stop_event.wait(timeout=5)  # brief grace period before first check
+        last_report_time = time.time()  # managed edition only — for elapsed_seconds reporting
 
         while not self._stop_event.is_set():
             # Wait while an interrupt popup is showing
@@ -677,9 +951,11 @@ class OnitryApp:
                 continue
 
             t0 = time.time()
+            elapsed_since_report = t0 - last_report_time
+            last_report_time = t0
             try:
                 context = context_log.read_tail(config.CONTEXT_FILE)
-                result = run_check(task, context, max_width, quality)
+                result = run_check(task, context, max_width, quality, elapsed_since_report)
                 cost = session_cost()
                 self._log_queue.put(("cost", cost))
 
@@ -705,6 +981,10 @@ class OnitryApp:
                     if interrupt:
                         self._log_queue.put(("popup", msg))
                         self._interrupt_count += 1
+
+            except DailyLimitReached as exc:
+                self._log_queue.put(("daily_limit", str(exc)))
+                break
 
             except Exception as exc:
                 self._enqueue_log(f"Error: {exc}")
@@ -745,12 +1025,52 @@ class OnitryApp:
                     self.status_var.set(item[1])
                     self.status_label.config(fg=item[2])
                 elif item[0] == "cost":
-                    self.cost_var.set(f"Session cost: ${item[1]:.3f}")
+                    if config.EDITION == "managed":
+                        remaining_min = int(config.MANAGED_DAILY_REMAINING_SECONDS // 60)
+                        self.cost_var.set(f"Time remaining today: {remaining_min}m")
+                    else:
+                        self.cost_var.set(f"Session cost: ${item[1]:.3f}")
                 elif item[0] == "popup":
                     self._show_popup(item[1])
+                elif item[0] == "daily_limit":
+                    self._on_daily_limit_reached(item[1])
         except queue.Empty:
             pass
         self.root.after(200, self._poll_queue)
+
+    def _on_daily_limit_reached(self, message: str):
+        self._stop()
+        self._enqueue_log(f"Daily limit reached: {message}")
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Daily Limit Reached")
+        dialog.resizable(False, False)
+        dialog.configure(bg=BG)
+        dialog.minsize(360, 160)
+
+        frame = tk.Frame(dialog, bg=BG, padx=20, pady=16)
+        frame.pack(fill="both", expand=True)
+
+        tk.Label(frame, text="⏱  Daily limit reached", bg=BG, fg="#e3b341",
+                 font=("Helvetica", 14, "bold")).pack(anchor="w", pady=(0, 10))
+
+        if config.MANAGED_PLAN == "managed_free":
+            tk.Label(
+                frame, text="You've used your free hour for today. Upgrade for 10 hours/day, "
+                            "or come back tomorrow.",
+                bg=BG, fg=FG, wraplength=320, justify="left",
+            ).pack(anchor="w", pady=(0, 14))
+            _Btn(frame, text="Upgrade — $19/mo", command=lambda: (dialog.destroy(), self._open_upgrade_checkout()),
+                 bg=GREEN, hover=GREEN_HV, padx=12, pady=6).pack(anchor="w")
+        else:
+            tk.Label(
+                frame, text="You've used all 10 hours for today. Come back tomorrow.",
+                bg=BG, fg=FG, wraplength=320, justify="left",
+            ).pack(anchor="w", pady=(0, 14))
+            _Btn(frame, text="OK", command=dialog.destroy,
+                 bg=BG3, fg=FG, hover="#444", padx=12, pady=6).pack(anchor="w")
+
+        dialog.grab_set()
 
     # ── False-positive flagging ──────────────────────────────────────────────
 
@@ -950,7 +1270,12 @@ class OnitryApp:
         stats_row.pack(fill="x", pady=(0, 4))
         tk.Label(stats_row, text=f"{self._interrupt_count} interruptions", bg=BG, fg=FG2,
                  font=("Helvetica", 12)).pack(side="left")
-        tk.Label(stats_row, text=f"${session_cost():.3f} spent", bg=BG, fg=FG2,
+        if config.EDITION == "managed":
+            remaining_min = int(config.MANAGED_DAILY_REMAINING_SECONDS // 60)
+            secondary_stat = f"{remaining_min}m left today"
+        else:
+            secondary_stat = f"${session_cost():.3f} spent"
+        tk.Label(stats_row, text=secondary_stat, bg=BG, fg=FG2,
                  font=("Helvetica", 12)).pack(side="right")
 
         _Btn(frame, text="Close", command=win.destroy,

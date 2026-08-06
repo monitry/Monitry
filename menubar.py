@@ -38,7 +38,6 @@ class OnitryBar(rumps.App):
         self._status_item = rumps.MenuItem("Not monitoring")
         self._task_item   = rumps.MenuItem("")
         self._cost_item   = rumps.MenuItem("")
-        self._chat_item   = rumps.MenuItem("Ask Claude...", callback=self.open_chat)
         self._open_item   = rumps.MenuItem("Open Onitry",  callback=self.open_window)
         self._quit_item   = rumps.MenuItem("Quit",          callback=self.quit_app)
 
@@ -47,12 +46,18 @@ class OnitryBar(rumps.App):
             self._task_item,
             self._cost_item,
             None,
-            self._chat_item,
-            None,
-            self._open_item,
-            None,
-            self._quit_item,
         ]
+
+        # Managed-edition users have no direct Anthropic key — this chat feature
+        # calls Anthropic directly, so it's only available in dev/byok builds.
+        if config.EDITION != "managed":
+            self._chat_item = rumps.MenuItem("Ask Claude...", callback=self.open_chat)
+            self.menu.append(self._chat_item)
+            self.menu.append(None)
+
+        self.menu.append(self._open_item)
+        self.menu.append(None)
+        self.menu.append(self._quit_item)
 
         rumps.Timer(self._poll, 2).start()
 
@@ -187,7 +192,10 @@ class OnitryBar(rumps.App):
             self._status_item.title = "Not monitoring"
 
         self._task_item.title = task if task else ""
-        self._cost_item.title = f"${cost:.3f} spent" if status != "idle" else ""
+        if status == "idle" or config.EDITION == "managed":
+            self._cost_item.title = ""  # managed edition shows remaining time in the GUI instead
+        else:
+            self._cost_item.title = f"${cost:.3f} spent"
 
 
 if __name__ == "__main__":

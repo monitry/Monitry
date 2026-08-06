@@ -85,6 +85,50 @@ class TestManagedMode(unittest.TestCase):
 
         self.assertAlmostEqual(client.session_cost(), 0.02, places=6)
 
+    @patch("ai.client.httpx.post")
+    def test_managed_mode_reports_elapsed_seconds_never_model(self, mock_post):
+        config.MANAGED_MODE = True
+        config.MANAGED_TOKEN = "onitry_sometoken"
+
+        fake_response = MagicMock()
+        fake_response.json.return_value = {"onTask": True, "activity": "x", "reminder": "", "notes": ""}
+        mock_post.return_value = fake_response
+
+        client.analyze("task", "b64", "", elapsed_seconds=12.5)
+
+        sent = mock_post.call_args.kwargs["json"]
+        self.assertEqual(sent["elapsed_seconds"], 12.5)
+        self.assertNotIn("model", sent)  # server always uses Haiku for managed requests
+
+    @patch("ai.client.httpx.post")
+    def test_managed_mode_raises_on_daily_limit(self, mock_post):
+        config.MANAGED_MODE = True
+        config.MANAGED_TOKEN = "onitry_sometoken"
+
+        fake_response = MagicMock()
+        fake_response.status_code = 429
+        fake_response.json.return_value = {"detail": "Daily limit reached. 0s remaining today."}
+        mock_post.return_value = fake_response
+
+        with self.assertRaises(client.DailyLimitReached):
+            client.analyze("task", "b64", "")
+
+    @patch("ai.client.httpx.post")
+    def test_managed_mode_updates_remaining_seconds_in_config(self, mock_post):
+        config.MANAGED_MODE = True
+        config.MANAGED_TOKEN = "onitry_sometoken"
+
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.json.return_value = {
+            "onTask": True, "activity": "x", "reminder": "", "notes": "",
+            "daily_remaining_seconds": 42.0,
+        }
+        mock_post.return_value = fake_response
+
+        client.analyze("task", "b64", "")
+        self.assertEqual(config.MANAGED_DAILY_REMAINING_SECONDS, 42.0)
+
 
 if __name__ == "__main__":
     unittest.main()

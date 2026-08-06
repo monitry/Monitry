@@ -26,3 +26,27 @@ SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "data", "settings.json")
 MANAGED_MODE = False
 MANAGED_TOKEN = os.environ.get("ONITRY_MANAGED_TOKEN", "")
 MANAGED_API_URL = os.environ.get("ONITRY_MANAGED_API_URL", "https://api.onitry.app")
+
+# Managed edition is always this model — never exposed as a setting, enforced server-side too.
+HAIKU_MODEL = "claude-haiku-4-5-20251001"
+
+# Which product this build is: "dev" (everything unlocked, for testing) |
+# "byok" ($30 one-time, own API key, no model choice) | "managed" (Google
+# sign-in, free 1hr/day or paid 10hr/day, no model or JPEG-quality choice).
+EDITION = os.environ.get("ONITRY_EDITION", "dev")
+
+# BYOK edition license — verified once against server/, then cached locally.
+BYOK_LICENSE_TOKEN = os.environ.get("ONITRY_LICENSE_TOKEN", "")
+BYOK_LICENSE_VERIFIED = False
+
+# Managed edition account state, populated after Google sign-in / each /v1/analyze call.
+MANAGED_PLAN = ""                     # "managed_free" | "managed_paid"
+MANAGED_EMAIL = ""
+MANAGED_DAILY_CAP_SECONDS = 0.0
+MANAGED_DAILY_REMAINING_SECONDS = 0.0
+
+# Google OAuth ("Sign in with Google") — desktop-app client, see server/README.md
+# for how to create one. The secret isn't confidential for this client type per
+# Google's own docs, but a real value is still needed to exchange the auth code.
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "")

@@ -19,6 +19,10 @@ PRICING = {
 _session_cost = 0.0
 _session_checks = 0
 
+
+class DailyLimitReached(Exception):
+    """Managed edition only — the server rejected the check because today's cap is used up."""
+
 # Errors worth a short retry — transient network/server issues, not bad requests.
 _RETRYABLE_ERRORS = (
     anthropic.APIConnectionError,
@@ -75,11 +79,12 @@ Be realistic — browsing documentation, writing code, or reading relevant mater
 Social media, YouTube, games, or unrelated browsing is off-task."""
 
 
-def analyze(task: str, screenshot_b64: str, context: str) -> dict:
+def analyze(task: str, screenshot_b64: str, context: str, elapsed_seconds: float = 0.0) -> dict:
     """Send screenshot + context to Claude (directly, or via the managed proxy) and
-    return the parsed JSON response."""
+    return the parsed JSON response. `elapsed_seconds` (time since the last check) is
+    only used in managed mode, to report against the server-enforced daily cap."""
     if config.MANAGED_MODE and config.MANAGED_TOKEN:
-        return _analyze_managed(task, screenshot_b64, context)
+        return _analyze_managed(task, screenshot_b64, context, elapsed_seconds)
     return _analyze_direct(task, screenshot_b64, context)
 
 
@@ -135,8 +140,9 @@ Analyze the screenshot and determine if the user is on task."""
     return json_raw
 
 
-def _analyze_managed(task: str, screenshot_b64: str, context: str) -> dict:
-    """Same contract as _analyze_direct, but via server/ so no Anthropic key is needed."""
+def _analyze_managed(task: str, screenshot_b64: str, context: str, elapsed_seconds: float) -> dict:
+    """Same contract as _analyze_direct, but via server/ so no Anthropic key is needed.
+    Model is never sent — the server always uses Haiku for managed requests regardless."""
     global notes, _session_cost, _session_checks
 
     resp = httpx.post(
@@ -147,14 +153,19 @@ def _analyze_managed(task: str, screenshot_b64: str, context: str) -> dict:
             "screenshot_b64": screenshot_b64,
             "context": context,
             "notes": notes or "",
-            "model": config.MODEL,
+            "elapsed_seconds": elapsed_seconds,
         },
         timeout=30.0,
     )
+    if resp.status_code == 429:
+        raise DailyLimitReached(resp.json().get("detail", "Daily limit reached."))
     resp.raise_for_status()
     json_raw = resp.json()
 
     _session_cost += json_raw.get("cost", 0.0)
     _session_checks += 1
+    config.MANAGED_DAILY_REMAINING_SECONDS = json_raw.get(
+        "daily_remaining_seconds", config.MANAGED_DAILY_REMAINING_SECONDS
+    )
     notes = json_raw.get("notes", notes)
     return json_raw
