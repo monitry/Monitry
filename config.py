@@ -18,6 +18,10 @@ CONTEXT_MAX_CHARS = 2000
 # Shared status file read by the menu bar app
 STATUS_FILE = os.path.join(os.path.dirname(__file__), "data", "status.json")
 
+# Browser-extension bridge (core/bridge.py): localhost port + pairing code file
+BRIDGE_PORT = int(os.environ.get("ONITRY_BRIDGE_PORT", "47323"))
+BRIDGE_TOKEN_FILE = os.path.join(os.path.dirname(__file__), "data", "bridge_token")
+
 # Persisted app settings (e.g. JPEG quality)
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "data", "settings.json")
 

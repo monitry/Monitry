@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 import queue
 import random
@@ -16,6 +17,7 @@ import config
 from ai.client import DailyLimitReached
 from alerts import notifier
 from core import auth as google_auth
+from core import bridge as onitry_bridge
 from core import context as context_log
 from core import license as byok_license
 from core import settings as app_settings
@@ -145,6 +147,51 @@ def _apply_ttk_style():
     )
 
 
+class _BrowserBridgeController:
+    """What the browser extension can see and do (see core/bridge.py).
+
+    Called from the bridge's HTTP thread, so it never touches tkinter directly:
+    reads plain attributes, and hands commands to the GUI thread via the queue.
+    """
+
+    def __init__(self, app: "OnitryApp"):
+        self.app = app
+
+    def status(self) -> dict:
+        app = self.app
+        data = {}
+        try:
+            with open(config.STATUS_FILE) as f:
+                data = json.load(f)
+        except (OSError, ValueError):
+            pass
+        timeline = list(app._timeline)
+        now = time.time()
+        running = app._running
+        return {
+            "running": running,
+            "paused": app._pause_until > now,
+            "pause_remaining_seconds": max(0.0, app._pause_until - now),
+            "status": data.get("status", "idle") if running else "idle",
+            "task": app._current_task if running else "",
+            "activity": data.get("activity", "") if running else "",
+            "session_seconds": (now - app._session_start_time) if running and app._session_start_time else 0.0,
+            "on_task_seconds": sum(d for d, s in timeline if s == "on_task"),
+            "off_task_seconds": sum(d for d, s in timeline if s == "off_task"),
+            "interrupts": app._interrupt_count,
+            "last_error": app._bridge_last_error,
+            "edition": config.EDITION,
+        }
+
+    def start_task(self, task: str, details: str = "") -> dict:
+        self.app._log_queue.put(("bridge_start", task, details))
+        return {"accepted": True}
+
+    def stop(self) -> dict:
+        self.app._log_queue.put(("bridge_stop",))
+        return {"accepted": True}
+
+
 class OnitryApp:
     def __init__(self, root: tk.Tk):
         self.root = root
@@ -166,6 +213,13 @@ class OnitryApp:
         self._session_start_time = None
         self._last_off_task_activity = None
 
+        # Browser-extension bridge state
+        self._current_task = ""
+        self._task_details = ""          # extra context from the browser planner (due dates etc.)
+        self._bridge_last_error = ""
+        self._bridge = None
+        self.bridge_code = ""
+
         self._settings = app_settings.load(config.SETTINGS_FILE)
         self.jpeg_quality = self._settings.get("jpeg_quality", 75)
         self.grace_period = self._settings.get("grace_period_seconds", 60)
@@ -181,7 +235,33 @@ class OnitryApp:
         _apply_ttk_style()
         self._load_credentials()
         self._build_ui()
+        self._start_bridge()
         self._poll_queue()
+
+    # ── Browser bridge ────────────────────────────────────────────────────────
+
+    def _start_bridge(self):
+        try:
+            self.bridge_code = onitry_bridge.load_or_create_token(config.BRIDGE_TOKEN_FILE)
+            self._bridge = onitry_bridge.BridgeServer(
+                _BrowserBridgeController(self), self.bridge_code, port=config.BRIDGE_PORT
+            )
+            self._bridge.start()
+        except OSError as exc:
+            self._bridge = None
+            self._enqueue_log(f"Browser bridge unavailable ({exc}) — is another Onitry window open?")
+
+    def _bridge_start(self, task: str, details: str):
+        """GUI thread: the browser planner asked us to monitor a task."""
+        if self._running and self._current_task == task:
+            return
+        if self._running:
+            self._stop(show_summary=False)
+        self.task_var.set(task)
+        self._task_details = details
+        self._bridge_last_error = ""
+        self._enqueue_log(f"Browser planner started a focus block: {task}")
+        self._start()
 
     def _build_ui(self):
         outer = tk.Frame(self.root, bg=BG, padx=18, pady=14)
@@ -703,6 +783,27 @@ class OnitryApp:
             tk.Label(frame, text=f"Session cost so far: ${session_cost():.3f}",
                      bg=BG, fg=FG2, anchor="w").pack(fill="x", pady=(0, 14))
 
+        # ── Browser extension pairing ──
+        tk.Label(frame, text="Browser planner pairing code:", bg=BG, fg=FG, anchor="w").pack(fill="x", pady=(0, 4))
+        code_row = tk.Frame(frame, bg=BG)
+        code_row.pack(fill="x", pady=(0, 4))
+        code_text = self.bridge_code if self._bridge else "unavailable"
+        tk.Label(code_row, text=code_text, bg=BG2, fg=FG, font=("Menlo", 14, "bold"), padx=10, pady=4).pack(side="left")
+
+        def copy_code():
+            self.root.clipboard_clear()
+            self.root.clipboard_append(self.bridge_code)
+
+        if self._bridge:
+            _Btn(code_row, text="Copy", command=copy_code, bg=BG3, fg=FG, hover="#444",
+                 font=("Helvetica", 11), padx=10, pady=4).pack(side="left", padx=(8, 0))
+        tk.Label(
+            frame,
+            text=f"Paste this into the browser extension (Today → Settings → Onitry) so starting a focus block there "
+                 f"starts monitoring here. Listening on 127.0.0.1:{config.BRIDGE_PORT} only.",
+            bg=BG, fg=FG2, font=("Helvetica", 10), wraplength=340, justify="left",
+        ).pack(fill="x", pady=(0, 14))
+
         btn_frame = tk.Frame(frame, bg=BG)
         btn_frame.pack(anchor="w")
 
@@ -829,6 +930,7 @@ class OnitryApp:
 
     def _start(self):
         task = self.task_var.get().strip()
+        details, self._task_details = self._task_details, ""
         if not task:
             self.task_entry.config(highlightbackground="#f85149")
             return
@@ -851,6 +953,9 @@ class OnitryApp:
             self.cost_var.set("Session cost: $0.000")
 
         self._remember_task(task)
+        self._current_task = task
+        # The AI sees the planner's context too (e.g. what's due), not just the title.
+        ai_task = f"{task} (context from the user's planner: {details})" if details else task
 
         self._stop_event.clear()
         self._running = True
@@ -860,14 +965,14 @@ class OnitryApp:
         self._resume_from_pause()  # clear any leftover pause state from a prior session
 
         thread = threading.Thread(
-            target=self._monitor_loop, args=(task, max_width, self.jpeg_quality), daemon=True
+            target=self._monitor_loop, args=(ai_task, max_width, self.jpeg_quality), daemon=True
         )
         thread.start()
 
         self._enqueue_log(f"Started — {task}")
         self._enqueue_log(f"Model: {config.MODEL}  |  Resolution: {max_width}px  |  Max interval: {MAX_INTERVAL}s")
 
-    def _stop(self):
+    def _stop(self, show_summary: bool = True):
         self._stop_event.set()
         self._paused.clear()
         self._running = False
@@ -880,7 +985,7 @@ class OnitryApp:
         self._enqueue_log("Monitoring stopped.")
         status_file.write(config.STATUS_FILE, "idle")
 
-        if self._timeline:
+        if self._timeline and show_summary:
             self._show_session_summary()
 
     # ── Pause (short break) ──────────────────────────────────────────────────
@@ -958,6 +1063,7 @@ class OnitryApp:
                 result = run_check(task, context, max_width, quality, elapsed_since_report)
                 cost = session_cost()
                 self._log_queue.put(("cost", cost))
+                self._bridge_last_error = ""
 
                 on_task = result.get("onTask", True)
                 activity = result.get("activity", "unknown")
@@ -1006,6 +1112,9 @@ class OnitryApp:
     # ── Helpers ───────────────────────────────────────────────────────────────
 
     def _enqueue_log(self, msg: str):
+        # Surface real failures to the browser planner (not the per-check "ERROR: error" summary line).
+        if msg.startswith("Error: ") or (msg.startswith("ERROR:") and "(next in" not in msg):
+            self._bridge_last_error = msg
         ts = datetime.datetime.now().strftime("%H:%M:%S")
         self._log_queue.put(("log", f"[{ts}] {msg}"))
 
@@ -1034,6 +1143,11 @@ class OnitryApp:
                     self._show_popup(item[1])
                 elif item[0] == "daily_limit":
                     self._on_daily_limit_reached(item[1])
+                elif item[0] == "bridge_start":
+                    self._bridge_start(item[1], item[2])
+                elif item[0] == "bridge_stop":
+                    if self._running:
+                        self._stop(show_summary=False)
         except queue.Empty:
             pass
         self.root.after(200, self._poll_queue)
