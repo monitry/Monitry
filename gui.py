@@ -14,6 +14,7 @@ import httpx
 import keyring
 
 import config
+from ai import review as review_ai
 from ai.client import DailyLimitReached
 from alerts import notifier
 from core import auth as google_auth
@@ -190,6 +191,13 @@ class _BrowserBridgeController:
     def stop(self) -> dict:
         self.app._log_queue.put(("bridge_stop",))
         return {"accepted": True}
+
+    def review(self, stats: dict) -> dict:
+        # Runs on the bridge's own request thread; a single API call, no tkinter.
+        try:
+            return review_ai.weekly_review(stats)
+        except review_ai.ReviewUnavailable as exc:
+            return {"error": str(exc)}
 
 
 class OnitryApp:

@@ -25,6 +25,12 @@ class FakeController:
         self.stopped += 1
         return {"accepted": True}
 
+    def review(self, stats):
+        if stats.get("fail"):
+            return {"error": "no key"}
+        self.reviewed = stats
+        return {"text": "Good week.", "model": "test-model"}
+
 
 class TestBridge(unittest.TestCase):
     def setUp(self):
@@ -106,6 +112,30 @@ class TestBridge(unittest.TestCase):
         status, _, _ = self.request("POST", "/v1/task", {"task": "x"}, {"Origin": EXT_ORIGIN, "X-Onitry-Token": "NOPE-NOPE"})
         self.assertEqual(status, 401)
         self.assertEqual(self.controller.started, [])
+
+    def test_review_returns_text(self):
+        status, data, _ = self.request("POST", "/v1/review", {"stats": {"week": "2026-10-05", "done": 12}}, self.auth())
+        self.assertEqual(status, 200)
+        self.assertEqual(data["text"], "Good week.")
+        self.assertEqual(self.controller.reviewed["done"], 12)
+
+    def test_review_needs_stats_object(self):
+        status, _, _ = self.request("POST", "/v1/review", {"stats": "nope"}, self.auth())
+        self.assertEqual(status, 400)
+
+    def test_review_error_is_503(self):
+        status, data, _ = self.request("POST", "/v1/review", {"stats": {"fail": True}}, self.auth())
+        self.assertEqual(status, 503)
+        self.assertEqual(data["error"], "no key")
+
+    def test_review_needs_token(self):
+        status, _, _ = self.request("POST", "/v1/review", {"stats": {}}, {"Origin": EXT_ORIGIN})
+        self.assertEqual(status, 401)
+
+    def test_review_allows_larger_body(self):
+        big = {"journal": ["x" * 200] * 150}  # ~30 KB: over the normal limit, under the review limit
+        status, _, _ = self.request("POST", "/v1/review", {"stats": big}, self.auth())
+        self.assertEqual(status, 200)
 
 
 class TestPairingCode(unittest.TestCase):

@@ -1,4 +1,4 @@
-"""Local bridge between Onitry and the browser extension (Inkwell "Today" planner).
+"""Local bridge between Onitry and the Onitry Plan browser extension.
 
 The extension plans your day; Onitry watches your screen. The bridge lets them
 talk so starting a focus block in the browser starts Onitry monitoring on that
@@ -14,7 +14,9 @@ Security model (it's a localhost server, so any web page could try to reach it):
   * the Host header must be 127.0.0.1/localhost (blocks DNS-rebinding)
 
 Stdlib only, so it adds no dependencies. The GUI owns a controller object that
-implements ``status()``, ``start_task(task, details)`` and ``stop()``.
+implements ``status()``, ``start_task(task, details)``, ``stop()`` and
+``review(stats)`` (the weekly AI review, which uses Onitry's own API key so the
+extension never holds one).
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ from typing import Protocol
 DEFAULT_PORT = 47323
 API_VERSION = 1
 MAX_BODY_BYTES = 16 * 1024
+MAX_REVIEW_BODY_BYTES = 64 * 1024  # weekly stats + journal excerpts
 _CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O/1/I to keep it typeable
 
 
@@ -36,6 +39,7 @@ class BridgeController(Protocol):
     def status(self) -> dict: ...
     def start_task(self, task: str, details: str = "") -> dict: ...
     def stop(self) -> dict: ...
+    def review(self, stats: dict) -> dict: ...
 
 
 def generate_code() -> str:
@@ -110,9 +114,9 @@ def make_handler(controller: BridgeController, token: str, port: int):
                 return False
             return True
 
-        def _json_body(self) -> dict | None:
+        def _json_body(self, limit: int = MAX_BODY_BYTES) -> dict | None:
             length = int(self.headers.get("Content-Length") or 0)
-            if length > MAX_BODY_BYTES:
+            if length > limit:
                 self._send(413, {"error": "body too large"})
                 return None
             raw = self.rfile.read(length) if length else b"{}"
@@ -157,7 +161,7 @@ def make_handler(controller: BridgeController, token: str, port: int):
             path = self.path.split("?", 1)[0]
             if not self._guard():
                 return
-            data = self._json_body()
+            data = self._json_body(MAX_REVIEW_BODY_BYTES if path == "/v1/review" else MAX_BODY_BYTES)
             if data is None:
                 return
             if path == "/v1/task":
@@ -169,6 +173,16 @@ def make_handler(controller: BridgeController, token: str, port: int):
                 self._send(200, {"ok": True, **controller.start_task(task, details)})
             elif path == "/v1/stop":
                 self._send(200, {"ok": True, **controller.stop()})
+            elif path == "/v1/review":
+                stats = data.get("stats")
+                if not isinstance(stats, dict):
+                    self._send(400, {"error": "stats object is required"})
+                    return
+                result = controller.review(stats)
+                if result.get("error"):
+                    self._send(503, {"error": result["error"]})
+                else:
+                    self._send(200, {"ok": True, **result})
             else:
                 self._send(404, {"error": "not found"})
 
