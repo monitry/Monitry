@@ -2,14 +2,17 @@
   position: fixed;
   top: 0; left: 0; right: 0;
   z-index: 100;
+  border-bottom: 1px solid var(--border);
+  background: rgba(12, 12, 12, 0.85);
+  backdrop-filter: blur(12px);
+}
+
+.bar {
   height: var(--nav-h);
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 0 40px;
-  border-bottom: 1px solid var(--border);
-  background: rgba(12, 12, 12, 0.85);
-  backdrop-filter: blur(12px);
 }
 
 .logo {
@@ -20,6 +23,7 @@
   font-weight: 700;
   color: var(--fg);
   letter-spacing: -0.5px;
+  white-space: nowrap;
 }
 
 .logo span { color: var(--green); }
@@ -38,6 +42,7 @@
   border-radius: 6px;
   font-size: 14px;
   color: var(--fg2);
+  white-space: nowrap;
   transition: color 0.15s, background 0.15s;
 }
 
@@ -60,7 +65,87 @@
   border-radius: 6px;
   font-size: 14px;
   font-weight: 600;
+  white-space: nowrap;
   transition: background 0.15s;
 }
 
 .cta:hover { background: var(--green-h); }
+
+/* ── Mobile menu toggle (hidden on desktop) ────────────────────────────── */
+.menuToggle {
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  gap: 5px;
+  width: 32px;
+  height: 32px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.menuToggle span {
+  display: block;
+  height: 2px;
+  background: var(--fg);
+  border-radius: 1px;
+}
+
+.mobileMenu {
+  display: none;
+}
+
+/* ── Phone / narrow tablet breakpoint ──────────────────────────────────── */
+@media (max-width: 760px) {
+  .bar {
+    padding: 0 16px;
+  }
+
+  .tabs,
+  .cta {
+    display: none;
+  }
+
+  .menuToggle {
+    display: flex;
+  }
+
+  .mobileMenu {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 16px 16px;
+    gap: 2px;
+    border-top: 1px solid var(--border);
+    background: rgba(12, 12, 12, 0.97);
+  }
+
+  .mobileLink {
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    padding: 12px 8px;
+    border-radius: 6px;
+    font-size: 15px;
+    color: var(--fg2);
+  }
+
+  .mobileLink:hover,
+  .mobileLink.active {
+    color: var(--fg);
+    background: var(--bg3);
+  }
+
+  .mobileCta {
+    margin-top: 8px;
+    background: var(--green);
+    color: white;
+    border: none;
+    cursor: pointer;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+}

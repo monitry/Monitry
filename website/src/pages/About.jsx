@@ -1,6 +1,6 @@
 import styles from "./About.module.css";
 
-const ROADMAP = [
+const FULLFOCUS_ROADMAP = [
   {
     status: "shipped",
     title: "Core monitoring",
@@ -22,6 +22,31 @@ const ROADMAP = [
     body: "The AI decides whether a situation warrants a focus-stealing popup or a silent banner.",
   },
   {
+    status: "shipped",
+    title: "Pause without quitting",
+    body: "A 10-minute pause button for real breaks, instead of closing the app and forgetting to reopen it.",
+  },
+  {
+    status: "shipped",
+    title: "Flag false positives",
+    body: "Tell the AI when it got a call wrong — the correction feeds back into its context for the next check.",
+  },
+  {
+    status: "shipped",
+    title: "Session reports",
+    body: "End-of-session summary: time on task, off-task events, a visual timeline, activity breakdown.",
+  },
+  {
+    status: "shipped",
+    title: "BYOK & Managed editions",
+    body: "A $30 one-time bring-your-own-key plan, and a Google-sign-in managed plan with a free tier.",
+  },
+  {
+    status: "shipped",
+    title: "Idle detection",
+    body: "Checks pause after 5 minutes with no mouse/keyboard input — no wasted API cost while you're away.",
+  },
+  {
     status: "planned",
     title: "Audio input",
     body: "Detect background noise (music, video, calls) as an additional signal alongside the screenshot.",
@@ -33,25 +58,88 @@ const ROADMAP = [
   },
   {
     status: "planned",
-    title: "Idle detection",
-    body: "Skip API calls when the mouse and keyboard have been idle — save costs when you step away.",
+    title: "Windows / Linux support",
+    body: "Cross-platform builds without macOS-specific dependencies.",
+  },
+];
+
+const CLASSWATCH_ROADMAP = [
+  {
+    status: "shipped",
+    title: "Multi-screen detection",
+    body: "A vision model finds every laptop/monitor in a single camera frame.",
+  },
+  {
+    status: "shipped",
+    title: "Cross-frame identity tracking",
+    body: "Screens are matched by position across capture cycles, so the same physical screen keeps the same ID.",
+  },
+  {
+    status: "shipped",
+    title: "Perspective correction",
+    body: "Each screen's surface is segmented and perspective-corrected into a flat rectangle before analysis.",
+  },
+  {
+    status: "shipped",
+    title: "Per-screen activity log",
+    body: "Each tracked screen gets its own independent activity log and AI-maintained notes.",
+  },
+  {
+    status: "shipped",
+    title: "Markdown session reports",
+    body: "Stopping the run writes a full timeline and on-task percentage per screen.",
+  },
+  {
+    status: "planned",
+    title: "Live-view GUI",
+    body: "A proper window instead of a CLI-only tool — live view, not just a report at the end.",
+  },
+  {
+    status: "planned",
+    title: "Multi-camera support",
+    body: "Cover a larger room or multiple rooms from more than one camera feed at once.",
   },
   {
     status: "planned",
     title: "Windows / Linux support",
     body: "Cross-platform builds without macOS-specific dependencies.",
   },
-  {
-    status: "planned",
-    title: "Session reports",
-    body: "End-of-session summary: time on task, off-task events, activity breakdown.",
-  },
 ];
 
-export default function About() {
-  const shipped = ROADMAP.filter((r) => r.status === "shipped");
-  const planned = ROADMAP.filter((r) => r.status === "planned");
+function ProductRoadmap({ name, items }) {
+  const shipped = items.filter((r) => r.status === "shipped");
+  const planned = items.filter((r) => r.status === "planned");
 
+  return (
+    <div className={styles.productGroup}>
+      <h3 className={styles.productTitle}>{name}</h3>
+
+      <div className={styles.roadmapGroup}>
+        <h4 className={styles.groupTitle}>
+          <span className={styles.dotShipped} /> Shipped
+        </h4>
+        <div className={styles.roadmapList}>
+          {shipped.map((item) => (
+            <RoadmapItem key={item.title} {...item} />
+          ))}
+        </div>
+      </div>
+
+      <div className={styles.roadmapGroup}>
+        <h4 className={styles.groupTitle}>
+          <span className={styles.dotPlanned} /> Planned
+        </h4>
+        <div className={styles.roadmapList}>
+          {planned.map((item) => (
+            <RoadmapItem key={item.title} {...item} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function About() {
   return (
     <main className={styles.page}>
       <div className={styles.inner}>
@@ -61,27 +149,8 @@ export default function About() {
           <p className={styles.label}>Roadmap</p>
           <h2 className={styles.title}>What's been built &amp; what's coming</h2>
 
-          <div className={styles.roadmapGroup}>
-            <h3 className={styles.groupTitle}>
-              <span className={styles.dotShipped} /> Shipped
-            </h3>
-            <div className={styles.roadmapList}>
-              {shipped.map((item) => (
-                <RoadmapItem key={item.title} {...item} />
-              ))}
-            </div>
-          </div>
-
-          <div className={styles.roadmapGroup}>
-            <h3 className={styles.groupTitle}>
-              <span className={styles.dotPlanned} /> Planned
-            </h3>
-            <div className={styles.roadmapList}>
-              {planned.map((item) => (
-                <RoadmapItem key={item.title} {...item} />
-              ))}
-            </div>
-          </div>
+          <ProductRoadmap name="Full Focus" items={FULLFOCUS_ROADMAP} />
+          <ProductRoadmap name="ClassWatch" items={CLASSWATCH_ROADMAP} />
         </section>
 
         {/* Contact */}
@@ -102,8 +171,8 @@ export default function About() {
             <ContactCard
               icon="🐙"
               title="GitHub"
-              value="github.com/yourname/onitry"
-              href="https://github.com"
+              value="github.com/monitry/Monitry"
+              href="https://github.com/monitry/Monitry"
             />
           </div>
         </section>

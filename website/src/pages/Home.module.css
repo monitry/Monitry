@@ -295,8 +295,16 @@
 .feature p { font-size: 13px; color: var(--fg2); line-height: 1.65; }
 
 /* ── Pricing ────────────────────────────────────────────────────────────── */
-.pricingCard {
+.pricingGrid {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 24px;
   margin-top: 56px;
+}
+
+.pricingCard {
+  flex: 1 1 340px;
   max-width: 420px;
   border: 1px solid var(--green);
   border-radius: 16px;
@@ -304,6 +312,8 @@
   padding: 40px;
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .pricingCard::before {
@@ -345,6 +355,7 @@
 .pricingList {
   list-style: none;
   margin-bottom: 32px;
+  flex: 1; /* fills remaining card height so both cards' CTAs align, list-length permitting */
 }
 
 .pricingList li {
