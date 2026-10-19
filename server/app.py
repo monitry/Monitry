@@ -1,6 +1,7 @@
 """Onitry managed-API proxy + accounts + licensing.
 
-Three product editions share this server:
+Backs Full Focus, the screenshot-monitoring product. Three product editions
+share this server:
   - "byok"    ($30 one-time) — never calls /v1/analyze. Only ever hits
               /v1/license/verify, once (or occasionally), then runs fully
               offline against the user's own Anthropic key.
@@ -45,6 +46,13 @@ PRICING = {
 }
 MANAGED_MODEL = "claude-haiku-4-5-20251001"
 
+# Floor on real wall-clock time between /v1/analyze calls from the same token — see
+# db.check_rate_limit's docstring for why this can't just be the elapsed_seconds
+# field. The desktop app's own adaptive interval never goes below 10s, with jitter
+# as low as 0.4x (4s); this leaves headroom above that while still bounding a
+# tight-loop client to a small, fixed multiple of legitimate request frequency.
+MIN_ANALYZE_INTERVAL_SECONDS = 3.0
+
 # Daily wall-clock monitoring caps, in seconds, by plan.
 PLAN_LIMITS = {
     db.PLAN_FREE: 60 * 60,       # 1 hour/day
@@ -76,10 +84,14 @@ def _get_client() -> anthropic.Anthropic:
 
 def _parse_json_response(raw: str) -> dict:
     raw = raw.strip()
+    # Trim the leading/trailing fence directly rather than splitting on every "```"
+    # in the text — the JSON payload can legitimately contain that sequence (e.g.
+    # an "activity" description quoting code on screen), and a naive split would
+    # truncate on it. Kept in sync with ai/client.py's identical fix.
     if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
+        raw = raw.removeprefix("```json").removeprefix("```").strip()
+        if raw.endswith("```"):
+            raw = raw.removesuffix("```").strip()
     return json.loads(raw)
 
 
@@ -166,6 +178,9 @@ def verify_license(req: LicenseVerifyRequest) -> dict:
 def analyze(req: AnalyzeRequest) -> dict:
     subscriber = _require_managed_subscriber(req.token)
     cap = PLAN_LIMITS[subscriber["plan"]]
+
+    if not db.check_rate_limit(req.token, MIN_ANALYZE_INTERVAL_SECONDS):
+        raise HTTPException(status_code=429, detail="Too many requests — please slow down.")
 
     usage = db.check_and_consume_daily_usage(req.token, max(0.0, req.elapsed_seconds), cap)
     if not usage["allowed"]:

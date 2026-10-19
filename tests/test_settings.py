@@ -39,6 +39,18 @@ class TestSettings(unittest.TestCase):
         self.assertEqual(loaded["jpeg_quality"], 90)
         self.assertEqual(loaded["model_label"], "Haiku")
 
+    def test_relative_path_with_no_directory_component(self):
+        # Regression test: os.path.dirname("settings.json") == "", and
+        # os.makedirs("", exist_ok=True) raises FileNotFoundError — save() must
+        # not blindly call makedirs on an empty directory component.
+        orig_cwd = os.getcwd()
+        try:
+            os.chdir(self.tmpdir)
+            settings.save("settings.json", {"jpeg_quality": 40})
+            self.assertTrue(os.path.exists("settings.json"))
+        finally:
+            os.chdir(orig_cwd)
+
 
 if __name__ == "__main__":
     unittest.main()

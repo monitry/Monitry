@@ -59,14 +59,19 @@ def login_with_google(client_id: str, client_secret: str, timeout: float = 120.0
         "state": state,
         "prompt": "select_account",
     })
-    webbrowser.open(auth_url)
+    try:
+        webbrowser.open(auth_url)
 
-    server.timeout = timeout
-    server.auth_code = None
-    server.auth_state = None
-    server.auth_error = None
-    server.handle_request()
-    server.server_close()
+        server.timeout = timeout
+        server.auth_code = None
+        server.auth_state = None
+        server.auth_error = None
+        server.handle_request()
+    finally:
+        # Guarantee the bound localhost port is released even if handle_request()
+        # raises — otherwise a failed login leaks it for the rest of this
+        # long-running desktop app's process lifetime.
+        server.server_close()
 
     if server.auth_error:
         raise GoogleLoginError(server.auth_error)

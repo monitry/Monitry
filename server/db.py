@@ -54,9 +54,20 @@ def init_db() -> None:
                 daily_seconds_used REAL NOT NULL DEFAULT 0.0,
                 total_input_tokens INTEGER NOT NULL DEFAULT 0,
                 total_output_tokens INTEGER NOT NULL DEFAULT 0,
-                total_cost REAL NOT NULL DEFAULT 0.0
+                total_cost REAL NOT NULL DEFAULT 0.0,
+                last_request_at REAL
             )
         """)
+        _migrate_add_column(conn, "subscribers", "last_request_at", "REAL")
+
+
+def _migrate_add_column(conn: sqlite3.Connection, table: str, column: str, sql_type: str) -> None:
+    """Idempotently add `column` to `table` if it's missing — lets an existing
+    on-disk DB from before this column existed pick it up without a manual
+    migration step. CREATE TABLE IF NOT EXISTS above only handles fresh DBs."""
+    existing = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+    if column not in existing:
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {sql_type}")
 
 
 def generate_token() -> str:
@@ -169,6 +180,36 @@ def record_usage(token: str, input_tokens: int, output_tokens: int, cost: float)
             "WHERE token = ?",
             (input_tokens, output_tokens, cost, token),
         )
+
+
+def check_rate_limit(token: str, min_interval_seconds: float) -> bool:
+    """Per-token request-rate gate, independent of check_and_consume_daily_usage's
+    (client-reported) elapsed_seconds budget. A modified client could under-report
+    elapsed_seconds on every call to dodge the daily time cap while still hammering
+    /v1/analyze for real, billable Anthropic requests — the daily cap alone can't
+    catch that since it never observes real request frequency. This does, using a
+    server-side timestamp the client has no way to influence.
+
+    Returns True — and atomically records `now` as the new last-request time — if
+    enough wall-clock time has passed since the last ALLOWED request for this
+    token. Returns False (no state change) otherwise, so a burst of rejected
+    requests can never itself push the window forward and can never delay a
+    legitimate request that arrives after it.
+    """
+    now = time.time()
+    with _connect() as conn:
+        row = conn.execute(
+            "SELECT last_request_at FROM subscribers WHERE token = ?", (token,)
+        ).fetchone()
+        if row is None:
+            return False
+
+        last = row["last_request_at"]
+        if last is not None and (now - last) < min_interval_seconds:
+            return False
+
+        conn.execute("UPDATE subscribers SET last_request_at = ? WHERE token = ?", (now, token))
+        return True
 
 
 def check_and_consume_daily_usage(token: str, seconds: float, cap_seconds: float) -> dict:

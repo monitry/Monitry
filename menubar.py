@@ -1,5 +1,5 @@
 """
-Onitry menu bar app.
+Full Focus menu bar app.
 
 Run this instead of gui.py — it lives in the menu bar and spawns the
 GUI window on demand. The GUI writes status to data/status.json which
@@ -27,9 +27,9 @@ ICONS = {
 }
 
 
-class OnitryBar(rumps.App):
+class FullFocusBar(rumps.App):
     def __init__(self):
-        super().__init__(name="Onitry", title=ICONS["idle"], quit_button=None)
+        super().__init__(name="Full Focus", title=ICONS["idle"], quit_button=None)
 
         self._gui_proc    = None
         self._last_status = {}
@@ -38,7 +38,7 @@ class OnitryBar(rumps.App):
         self._status_item = rumps.MenuItem("Not monitoring")
         self._task_item   = rumps.MenuItem("")
         self._cost_item   = rumps.MenuItem("")
-        self._open_item   = rumps.MenuItem("Open Onitry",  callback=self.open_window)
+        self._open_item   = rumps.MenuItem("Open Full Focus",  callback=self.open_window)
         self._quit_item   = rumps.MenuItem("Quit",          callback=self.quit_app)
 
         self.menu = [
@@ -100,13 +100,13 @@ class OnitryBar(rumps.App):
         try:
             api_key = keyring.get_password("onitry", "anthropic_api_key")
             if not api_key:
-                self._reply_pending = ("Error", "API key not set.\nOpen Onitry and click 'Set Key'.")
+                self._reply_pending = ("Error", "API key not set.\nOpen Full Focus and click 'Set Key'.")
                 return
 
             context = context_log.read_tail(config.CONTEXT_FILE)
 
             system = (
-                f"You are Onitry, a productivity assistant embedded in a menu bar app. "
+                f"You are Full Focus, a productivity assistant embedded in a menu bar app. "
                 f"The user is working on: {task or 'an unspecified task'}.\n"
                 f"Recent session activity:\n{context or '(none yet)'}\n\n"
                 f"Answer concisely. If asked about progress or activity, refer to the session log above."
@@ -200,4 +200,4 @@ class OnitryBar(rumps.App):
 
 if __name__ == "__main__":
     rumps.debug_mode(True)
-    OnitryBar().run()
+    FullFocusBar().run()

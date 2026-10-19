@@ -31,6 +31,19 @@ class TestContextLog(unittest.TestCase):
         self.assertIn("reading docs", tail)
         self.assertIn("writing code", tail)
 
+    def test_relative_path_with_no_directory_component(self):
+        # Regression test: os.path.dirname("context.txt") == "", and
+        # os.makedirs("", exist_ok=True) raises FileNotFoundError — init_log/append
+        # must not blindly call makedirs on an empty directory component.
+        orig_cwd = os.getcwd()
+        try:
+            os.chdir(self.tmpdir)
+            context.init_log("context.txt", "task")
+            context.append("context.txt", "activity")
+            self.assertTrue(os.path.exists("context.txt"))
+        finally:
+            os.chdir(orig_cwd)
+
     def test_read_tail_limits_to_max_lines(self):
         context.init_log(self.path, "task")
         for i in range(15):

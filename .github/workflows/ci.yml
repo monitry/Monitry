@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  python:
+    # This project (Full Focus + ClassWatch) is macOS-only by design — see the
+    # root README — and requirements.txt pulls in rumps (PyObjC-based menu bar
+    # support), which is macOS-only and won't install on Linux runners. Note
+    # macOS runners cost more Actions minutes than Linux ones on private repos.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -r server/requirements.txt
+
+      - name: Run tests
+        run: python -m unittest discover -s tests
+
+      - name: Lint
+        run: ruff check .
+
+  website:
+    # The website is a plain Vite + React static site with no macOS-specific
+    # dependency, so it builds fine (and much cheaper) on a Linux runner.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: website
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: website/package-lock.json
+
+      - run: npm ci
+      - run: npm run build

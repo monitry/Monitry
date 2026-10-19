@@ -32,6 +32,11 @@ _RETRYABLE_ERRORS = (
     anthropic.OverloadedError,
 )
 
+# Managed mode's equivalent: connection-level failures only (timeout, connection
+# refused, DNS) — not httpx.HTTPStatusError, since that also covers 401/402/429
+# responses from our own server that must propagate immediately, not be retried.
+_MANAGED_RETRYABLE_ERRORS = (httpx.TransportError,)
+
 
 def _get_client():
     global _client
@@ -58,6 +63,16 @@ def _create_with_retry(retries: int = 2, backoff: float = 1.5, **kwargs):
         try:
             return _get_client().messages.create(**kwargs)
         except _RETRYABLE_ERRORS:
+            if attempt == retries:
+                raise
+            time.sleep(backoff * (attempt + 1))
+
+
+def _post_managed_with_retry(url: str, json_body: dict, timeout: float, retries: int = 2, backoff: float = 1.5):
+    for attempt in range(retries + 1):
+        try:
+            return httpx.post(url, json=json_body, timeout=timeout)
+        except _MANAGED_RETRYABLE_ERRORS:
             if attempt == retries:
                 raise
             time.sleep(backoff * (attempt + 1))
@@ -130,11 +145,14 @@ Analyze the screenshot and determine if the user is on task."""
     _session_checks += 1
 
     raw = message.content[0].text.strip()
-    # Strip markdown code fences if Claude wraps it anyway
+    # Strip markdown code fences if Claude wraps it anyway. Trim the leading/trailing
+    # fence directly rather than splitting on every "```" in the text — the JSON
+    # payload itself can legitimately contain that sequence (e.g. an "activity"
+    # description quoting code on screen), and a naive split would truncate on it.
     if raw.startswith("```"):
-        raw = raw.split("```")[1]
-        if raw.startswith("json"):
-            raw = raw[4:]
+        raw = raw.removeprefix("```json").removeprefix("```").strip()
+        if raw.endswith("```"):
+            raw = raw.removesuffix("```").strip()
     json_raw = json.loads(raw)
     notes = json_raw.get("notes", notes)
     return json_raw
@@ -145,9 +163,9 @@ def _analyze_managed(task: str, screenshot_b64: str, context: str, elapsed_secon
     Model is never sent — the server always uses Haiku for managed requests regardless."""
     global notes, _session_cost, _session_checks
 
-    resp = httpx.post(
+    resp = _post_managed_with_retry(
         f"{config.MANAGED_API_URL}/v1/analyze",
-        json={
+        {
             "token": config.MANAGED_TOKEN,
             "task": task,
             "screenshot_b64": screenshot_b64,

@@ -17,6 +17,7 @@ from ai.client import DailyLimitReached
 from alerts import notifier
 from core import auth as google_auth
 from core import context as context_log
+from core import idle
 from core import license as byok_license
 from core import settings as app_settings
 from core import status as status_file
@@ -115,6 +116,8 @@ STATUS_COLORS = {
 
 PAUSE_MINUTES = 10
 
+IDLE_THRESHOLD_SECONDS = 300  # skip checks (and their API cost) after 5 min with no mouse/keyboard input
+
 
 def _apply_ttk_style():
     style = ttk.Style()
@@ -145,10 +148,10 @@ def _apply_ttk_style():
     )
 
 
-class OnitryApp:
+class FullFocusApp:
     def __init__(self, root: tk.Tk):
         self.root = root
-        self.root.title("Onitry")
+        self.root.title("Full Focus")
         self.root.resizable(False, False)
         self.root.configure(bg=BG)
 
@@ -682,7 +685,7 @@ class OnitryApp:
             ).pack(fill="x", ipady=4, pady=(0, 14))
 
         elif config.EDITION == "managed" and config.MANAGED_PLAN == "managed_free":
-            tk.Label(frame, text="Onitry Pro — $19/mo:", bg=BG, fg=FG, anchor="w",
+            tk.Label(frame, text="Full Focus Pro — $19/mo:", bg=BG, fg=FG, anchor="w",
                      ).pack(fill="x", pady=(0, 4))
             tk.Label(
                 frame, text="10 hours/day instead of 1, and High detail mode.",
@@ -930,6 +933,7 @@ class OnitryApp:
 
         self._stop_event.wait(timeout=5)  # brief grace period before first check
         last_report_time = time.time()  # managed edition only — for elapsed_seconds reporting
+        was_idle = False
 
         while not self._stop_event.is_set():
             # Wait while an interrupt popup is showing
@@ -949,6 +953,18 @@ class OnitryApp:
             if remaining > 0:
                 self._stop_event.wait(timeout=remaining)
                 continue
+
+            # Idle — skip the check (and its API cost) while away from keyboard/mouse
+            if idle.get_idle_seconds() >= IDLE_THRESHOLD_SECONDS:
+                if not was_idle:
+                    self._enqueue_log(f"Away from keyboard — pausing checks (idle {IDLE_THRESHOLD_SECONDS // 60}m+)")
+                    was_idle = True
+                self._enqueue_status("AWAY", STATUS_COLORS["paused"])
+                self._stop_event.wait(timeout=5.0)
+                continue
+            if was_idle:
+                self._enqueue_log("Welcome back — resuming checks.")
+                was_idle = False
 
             t0 = time.time()
             elapsed_since_report = t0 - last_report_time
@@ -1288,7 +1304,7 @@ def main():
     import multiprocessing
     multiprocessing.set_start_method("spawn", force=True)
     root = tk.Tk()
-    OnitryApp(root)
+    FullFocusApp(root)
     root.mainloop()
 
 
