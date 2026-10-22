@@ -192,6 +192,14 @@ class _BrowserBridgeController:
         self.app._log_queue.put(("bridge_stop",))
         return {"accepted": True}
 
+    def pause(self, minutes: float) -> dict:
+        self.app._log_queue.put(("bridge_pause", minutes))
+        return {"accepted": True}
+
+    def resume(self) -> dict:
+        self.app._log_queue.put(("bridge_resume",))
+        return {"accepted": True}
+
     def review(self, stats: dict) -> dict:
         # Runs on the bridge's own request thread; a single API call, no tkinter.
         try:
@@ -1004,10 +1012,11 @@ class OnitryApp:
         elif self._running:
             self._start_pause()
 
-    def _start_pause(self):
-        self._pause_until = time.time() + PAUSE_MINUTES * 60
+    def _start_pause(self, minutes: float = PAUSE_MINUTES):
+        self._cancel_pause_tick()
+        self._pause_until = time.time() + minutes * 60
         self._enqueue_status("Paused", STATUS_COLORS["paused"])
-        self._enqueue_log(f"Paused — taking a break, resuming automatically in {PAUSE_MINUTES}m")
+        self._enqueue_log(f"Paused — taking a break, resuming automatically in {round(minutes)}m")
         status_file.write(config.STATUS_FILE, "paused", self.task_var.get(), "", session_cost())
         self._tick_pause_label()
 
@@ -1156,6 +1165,11 @@ class OnitryApp:
                 elif item[0] == "bridge_stop":
                     if self._running:
                         self._stop(show_summary=False)
+                elif item[0] == "bridge_pause":
+                    if self._running:
+                        self._start_pause(item[1])
+                elif item[0] == "bridge_resume":
+                    self._resume_from_pause()
         except queue.Empty:
             pass
         self.root.after(200, self._poll_queue)

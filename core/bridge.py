@@ -15,7 +15,7 @@ Security model (it's a localhost server, so any web page could try to reach it):
 
 Stdlib only, so it adds no dependencies. The GUI owns a controller object that
 implements ``status()``, ``start_task(task, details)``, ``stop()`` and
-``review(stats)`` (the weekly AI review, which uses Onitry's own API key so the
+``pause(minutes)``, ``resume()`` and ``review(stats)`` (the weekly AI review, which uses Onitry's own API key so the
 extension never holds one).
 """
 from __future__ import annotations
@@ -39,6 +39,8 @@ class BridgeController(Protocol):
     def status(self) -> dict: ...
     def start_task(self, task: str, details: str = "") -> dict: ...
     def stop(self) -> dict: ...
+    def pause(self, minutes: float) -> dict: ...
+    def resume(self) -> dict: ...
     def review(self, stats: dict) -> dict: ...
 
 
@@ -173,6 +175,17 @@ def make_handler(controller: BridgeController, token: str, port: int):
                 self._send(200, {"ok": True, **controller.start_task(task, details)})
             elif path == "/v1/stop":
                 self._send(200, {"ok": True, **controller.stop()})
+            elif path == "/v1/pause":
+                try:
+                    minutes = float(data.get("minutes", 10))
+                except (TypeError, ValueError):
+                    minutes = -1
+                if not 0 < minutes <= 240:
+                    self._send(400, {"error": "minutes must be between 0 and 240"})
+                    return
+                self._send(200, {"ok": True, **controller.pause(minutes)})
+            elif path == "/v1/resume":
+                self._send(200, {"ok": True, **controller.resume()})
             elif path == "/v1/review":
                 stats = data.get("stats")
                 if not isinstance(stats, dict):

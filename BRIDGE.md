@@ -42,6 +42,8 @@ can't send it without a CORS preflight, and preflights are only answered for
 | GET | `/v1/status` | – | `running, status (on_task/off_task/idle), task, activity, on_task_seconds, off_task_seconds, interrupts, paused, last_error` |
 | POST | `/v1/task` | `{task, details?}` | Starts monitoring the task. If a different task is running, it stops that one first, without showing its summary popup. |
 | POST | `/v1/stop` | `{}` | Stops monitoring. |
+| POST | `/v1/pause` | `{minutes}` | Pauses monitoring (0–240 min, resumes by itself). The planner's Pause button and break blocks use this. |
+| POST | `/v1/resume` | `{}` | Ends a pause early. |
 | POST | `/v1/review` | `{stats}` | Weekly review: `{text, model}`, or `503 {error}` when there's no API key or the call fails. Body limit 64 KB. |
 
 The port is `47323` (override with `ONITRY_BRIDGE_PORT`). Tests: `python -m unittest tests.test_bridge`.

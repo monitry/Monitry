@@ -25,6 +25,14 @@ class FakeController:
         self.stopped += 1
         return {"accepted": True}
 
+    def pause(self, minutes):
+        self.paused = minutes
+        return {"accepted": True}
+
+    def resume(self):
+        self.paused = 0
+        return {"accepted": True}
+
     def review(self, stats):
         if stats.get("fail"):
             return {"error": "no key"}
@@ -112,6 +120,19 @@ class TestBridge(unittest.TestCase):
         status, _, _ = self.request("POST", "/v1/task", {"task": "x"}, {"Origin": EXT_ORIGIN, "X-Onitry-Token": "NOPE-NOPE"})
         self.assertEqual(status, 401)
         self.assertEqual(self.controller.started, [])
+
+    def test_pause_and_resume(self):
+        status, _, _ = self.request("POST", "/v1/pause", {"minutes": 25}, self.auth())
+        self.assertEqual(status, 200)
+        self.assertEqual(self.controller.paused, 25)
+        status, _, _ = self.request("POST", "/v1/resume", {}, self.auth())
+        self.assertEqual(status, 200)
+        self.assertEqual(self.controller.paused, 0)
+
+    def test_pause_rejects_bad_minutes(self):
+        for bad in (0, -5, 500, "soon"):
+            status, _, _ = self.request("POST", "/v1/pause", {"minutes": bad}, self.auth())
+            self.assertEqual(status, 400, bad)
 
     def test_review_returns_text(self):
         status, data, _ = self.request("POST", "/v1/review", {"stats": {"week": "2026-10-05", "done": 12}}, self.auth())
