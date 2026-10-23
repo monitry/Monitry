@@ -1,4 +1,4 @@
-"""Weekly review for the Onitry Plan browser extension.
+"""Weekly review for the Timecheck browser extension.
 
 The extension computes the week's numbers locally (tasks done per subject,
 focus minutes, on-task %, distraction passes, journal lines) and posts them to

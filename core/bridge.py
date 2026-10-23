@@ -1,4 +1,4 @@
-"""Local bridge between Onitry and the Onitry Plan browser extension.
+"""Local bridge between Onitry and the Timecheck browser extension.
 
 The extension plans your day; Onitry watches your screen. The bridge lets them
 talk so starting a focus block in the browser starts Onitry monitoring on that

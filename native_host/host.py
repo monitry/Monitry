@@ -1,4 +1,4 @@
-"""Chrome native-messaging host for the Onitry Plan extension.
+"""Chrome native-messaging host for the Timecheck extension.
 
 Chrome starts this script when the extension calls
 ``chrome.runtime.sendNativeMessage("com.onitry.host", {...})``. It answers one

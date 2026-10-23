@@ -3,7 +3,7 @@ import os
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = "claude-sonnet-4-6"
 
-# Weekly review for the Onitry Plan extension (ai/review.py) — one call a week.
+# Weekly review for the Timecheck extension (ai/review.py) — one call a week.
 REVIEW_MODEL = os.environ.get("ONITRY_REVIEW_MODEL", "claude-opus-5-5")
 
 # How often to run a monitoring check (seconds)

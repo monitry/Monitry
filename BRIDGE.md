@@ -1,4 +1,4 @@
-# Browser bridge (Onitry ↔ Onitry Plan extension)
+# Browser bridge (Onitry ↔ Timecheck extension)
 
 Onitry runs a small local HTTP bridge so the browser extension can plan your day
 and drive monitoring:
@@ -56,7 +56,7 @@ python native_host/install.py --uninstall
 ```
 
 This registers `com.onitry.host` with Chrome, Chromium, Brave, Edge and Arc (on
-Windows it goes in the registry). Only the Onitry Plan extension
+Windows it goes in the registry). Only the Timecheck extension
 (`chrome-extension://dadagbofodnllhcohbhmjkdolklihcgn/`, fixed by the `key` in its
 manifest) can call it. It accepts two commands: `ping`, and `launch`, which starts
 `gui.py` detached unless the bridge is already listening. Tests:

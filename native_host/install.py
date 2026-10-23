@@ -1,4 +1,4 @@
-"""Register (or remove) Onitry's native-messaging host so the Onitry Plan
+"""Register (or remove) Onitry's native-messaging host so the Timecheck
 extension's "Launch Onitry" button works.
 
     python native_host/install.py                 # Chrome, Chromium, Brave, Edge, Arc
@@ -18,7 +18,7 @@ import stat
 import sys
 
 HOST_NAME = "com.onitry.host"
-# Fixed by the "key" in onitry-plan/manifest.json, so it's the same on every machine.
+# Fixed by the "key" in timecheck/manifest.json, so it's the same on every machine.
 DEFAULT_EXTENSION_ID = "dadagbofodnllhcohbhmjkdolklihcgn"
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -81,7 +81,7 @@ def write_launcher() -> str:
 def host_manifest(launcher: str, extension_id: str) -> dict:
     return {
         "name": HOST_NAME,
-        "description": "Onitry: lets the Onitry Plan extension start the Onitry app",
+        "description": "Onitry: lets the Timecheck extension start the Onitry app",
         "path": launcher,
         "type": "stdio",
         "allowed_origins": [f"chrome-extension://{extension_id}/"],
@@ -145,7 +145,7 @@ def main() -> None:
         return
     paths = install(args.extension_id)
     print(f"Registered {HOST_NAME} for chrome-extension://{args.extension_id}/ in:", *paths, sep="\n  ")
-    print("Restart the browser, then use Onitry Plan → ⚙ → Launch Onitry.")
+    print("Restart the browser, then use Timecheck → ⚙ → Launch Onitry.")
 
 
 if __name__ == "__main__":
