@@ -2,6 +2,7 @@ import datetime
 import os
 import shutil
 import tempfile
+import time
 import unittest
 
 from server import db
@@ -156,6 +157,52 @@ class TestServerDB(unittest.TestCase):
         result = db.check_and_consume_daily_usage(token, 100, cap_seconds=3600)
         self.assertTrue(result["allowed"])
         self.assertAlmostEqual(result["remaining"], 3500, places=3)
+
+    # ── Per-token request-rate gate ──────────────────────────────────────────
+
+    def test_first_request_is_always_allowed(self):
+        token = db.create_manual("a@b.com", db.PLAN_FREE)
+        self.assertTrue(db.check_rate_limit(token, min_interval_seconds=3.0))
+
+    def test_immediate_second_request_is_rejected(self):
+        token = db.create_manual("a@b.com", db.PLAN_FREE)
+        db.check_rate_limit(token, min_interval_seconds=3.0)
+        self.assertFalse(db.check_rate_limit(token, min_interval_seconds=3.0))
+
+    def test_request_after_interval_elapses_is_allowed(self):
+        token = db.create_manual("a@b.com", db.PLAN_FREE)
+        db.check_rate_limit(token, min_interval_seconds=3.0)
+        with db._connect() as conn:
+            conn.execute(
+                "UPDATE subscribers SET last_request_at = ? WHERE token = ?",
+                (time.time() - 5.0, token),
+            )
+        self.assertTrue(db.check_rate_limit(token, min_interval_seconds=3.0))
+
+    def test_rejected_attempt_does_not_reset_the_window(self):
+        # A burst of rejected requests must never itself push the window forward —
+        # otherwise a tight-loop client could keep the window perpetually "just
+        # reset" and delay a legitimate request indefinitely.
+        token = db.create_manual("a@b.com", db.PLAN_FREE)
+        db.check_rate_limit(token, min_interval_seconds=3.0)  # allowed, sets last_request_at
+        for _ in range(5):
+            self.assertFalse(db.check_rate_limit(token, min_interval_seconds=3.0))
+
+        with db._connect() as conn:
+            conn.execute(
+                "UPDATE subscribers SET last_request_at = ? WHERE token = ?",
+                (time.time() - 5.0, token),
+            )
+        self.assertTrue(db.check_rate_limit(token, min_interval_seconds=3.0))
+
+    def test_unknown_token_rejected(self):
+        self.assertFalse(db.check_rate_limit("nope", min_interval_seconds=3.0))
+
+    def test_different_tokens_are_independent(self):
+        a = db.create_manual("a@b.com", db.PLAN_FREE)
+        b = db.create_manual("b@b.com", db.PLAN_FREE)
+        self.assertTrue(db.check_rate_limit(a, min_interval_seconds=3.0))
+        self.assertTrue(db.check_rate_limit(b, min_interval_seconds=3.0))
 
     def test_remaining_daily_seconds_read_only(self):
         token = db.create_manual("a@b.com", db.PLAN_FREE)

@@ -1,6 +1,8 @@
 import unittest
 from unittest.mock import MagicMock, patch
 
+import httpx
+
 import config
 from ai import client
 
@@ -117,6 +119,53 @@ class TestManagedMode(unittest.TestCase):
 
         with self.assertRaises(client.DailyLimitReached):
             client.analyze("task", "b64", "")
+
+    @patch("ai.client.httpx.post")
+    @patch("ai.client.time.sleep")
+    def test_managed_mode_retries_on_connection_error_then_succeeds(self, mock_sleep, mock_post):
+        config.MANAGED_MODE = True
+        config.MANAGED_TOKEN = "onitry_sometoken"
+
+        fake_response = MagicMock()
+        fake_response.status_code = 200
+        fake_response.json.return_value = {"onTask": True, "activity": "x", "reminder": "", "notes": ""}
+        mock_post.side_effect = [httpx.ConnectError("connection refused"), fake_response]
+
+        result = client.analyze("task", "b64", "")
+
+        self.assertTrue(result["onTask"])
+        self.assertEqual(mock_post.call_count, 2)
+        mock_sleep.assert_called_once()
+
+    @patch("ai.client.httpx.post")
+    @patch("ai.client.time.sleep")
+    def test_managed_mode_raises_after_exhausting_retries(self, mock_sleep, mock_post):
+        config.MANAGED_MODE = True
+        config.MANAGED_TOKEN = "onitry_sometoken"
+        mock_post.side_effect = httpx.ConnectTimeout("timed out")
+
+        with self.assertRaises(httpx.ConnectTimeout):
+            client.analyze("task", "b64", "")
+        self.assertEqual(mock_post.call_count, 3)  # initial + 2 retries
+
+    @patch("ai.client.httpx.post")
+    def test_managed_mode_daily_limit_is_not_retried(self, mock_post):
+        # A 429 from our own server (daily cap) is a definitive answer, not a
+        # transient failure — retrying it in a loop would be pointless and,
+        # combined with the server's own rate limiter, would just get 429'd
+        # again immediately. httpx.post returning a 429 response (not raising)
+        # never even reaches the retry wrapper's except clause.
+        config.MANAGED_MODE = True
+        config.MANAGED_TOKEN = "onitry_sometoken"
+
+        fake_response = MagicMock()
+        fake_response.status_code = 429
+        fake_response.json.return_value = {"detail": "Daily limit reached."}
+        mock_post.return_value = fake_response
+
+        with self.assertRaises(client.DailyLimitReached):
+            client.analyze("task", "b64", "")
+        self.assertEqual(mock_post.call_count, 1)
 
     @patch("ai.client.httpx.post")
     def test_managed_mode_updates_remaining_seconds_in_config(self, mock_post):

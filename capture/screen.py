@@ -19,5 +19,7 @@ def grab_screenshot(max_width: int = 1280, quality: int = 75) -> str:
         scale = max_width / w
         img_bgr = cv2.resize(img_bgr, (max_width, int(h * scale)), interpolation=cv2.INTER_AREA)
 
-    _, buf = cv2.imencode(".jpg", img_bgr, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    ok, buf = cv2.imencode(".jpg", img_bgr, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    if not ok:
+        raise ValueError("Failed to JPEG-encode screenshot")
     return base64.b64encode(buf.tobytes()).decode("utf-8")

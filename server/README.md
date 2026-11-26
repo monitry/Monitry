@@ -8,7 +8,8 @@
 > deleted later (together with `core/license.py`, `core/auth.py`, and the
 > managed paths in `ai/client.py` / `gui.py`).
 
-Backs two of Onitry's three product editions:
+Backs two of Full Focus's three product editions (Full Focus is Onitry's
+screenshot-monitoring product — see the root README):
 
 - **`byok`** ($30 one-time) — the desktop app calls Anthropic directly with the
   user's own key. This server is only ever hit once (or occasionally) to verify
@@ -126,14 +127,19 @@ token as `subscriber_token` to test the upgrade path.
   Railway, Render, a plain VPS all work fine for a single-file SQLite app
   like this. Pick one when ready; `/health` is there for whatever platform's
   health check needs it.
-- **Rate limiting / abuse protection.** A malicious or buggy client could hit
-  `/v1/analyze` in a tight loop. The daily cap limits the *damage* per
-  subscriber but doesn't stop a burst — add a per-token rate limit before
-  opening this up publicly.
+- ~~Rate limiting / abuse protection.~~ **Done** — `/v1/analyze` now enforces a
+  per-token minimum interval (`MIN_ANALYZE_INTERVAL_SECONDS`, currently 3s)
+  using a server-observed timestamp (`db.check_rate_limit`), independent of
+  the daily-cap's client-reported `elapsed_seconds`. This specifically closes
+  the gap where a client could under-report `elapsed_seconds` to dodge the
+  daily cap while still hammering the endpoint for real, billable Anthropic
+  calls — see `db.check_rate_limit`'s docstring. Still single-process/SQLite
+  scoped like the rest of this module; revisit alongside the Postgres move if
+  this ever runs as multiple worker processes.
 - **Google OAuth consent screen verification.** Testing-mode consent screens
   cap at 100 test users and show an "unverified app" warning. Submit for
   Google's verification before a real public launch.
-- **Checkout wiring on the website.** The marketing site's "Get Onitry"
+- **Checkout wiring on the website.** The marketing site's "Get Full Focus"
   button still just shows an `alert()` — wire it to call
   `/v1/checkout/byok` (no account needed) and redirect.
 - **Timezone.** Daily usage resets on the UTC calendar date, not the

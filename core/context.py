@@ -2,9 +2,15 @@ import datetime
 import os
 
 
+def _ensure_parent_dir(path: str) -> None:
+    directory = os.path.dirname(path)
+    if directory:
+        os.makedirs(directory, exist_ok=True)
+
+
 def init_log(path: str, task: str) -> None:
     """Create/overwrite the session log with a header line for a new session."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    _ensure_parent_dir(path)
     ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     with open(path, "w") as f:
         f.write(f"Session started: {ts}\nTask: {task}\n\n")
@@ -12,7 +18,7 @@ def init_log(path: str, task: str) -> None:
 
 def append(path: str, activity: str) -> None:
     """Append a timestamped activity line to the session log."""
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    _ensure_parent_dir(path)
     ts = datetime.datetime.now().strftime("%H:%M:%S")
     with open(path, "a") as f:
         f.write(f"[{ts}] {activity}\n")

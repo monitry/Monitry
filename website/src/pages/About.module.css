@@ -37,8 +37,30 @@
 }
 
 /* ── Roadmap ────────────────────────────────────────────────────────────── */
+.productGroup {
+  margin-bottom: 56px;
+}
+
+.productGroup:last-child {
+  margin-bottom: 0;
+}
+
+.productTitle {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--fg);
+  letter-spacing: -0.5px;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
 .roadmapGroup {
-  margin-bottom: 48px;
+  margin-bottom: 32px;
+}
+
+.roadmapGroup:last-child {
+  margin-bottom: 0;
 }
 
 .groupTitle {

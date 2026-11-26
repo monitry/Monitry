@@ -2,6 +2,7 @@ import json
 import os
 import shutil
 import tempfile
+import time
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -175,12 +176,48 @@ class TestServerApp(unittest.TestCase):
         })
         self.assertEqual(resp.status_code, 200)
 
+        # Back-date last_request_at so this second call clears the (separate)
+        # per-token rate limiter and actually exercises the daily-cap rejection
+        # path being tested here, rather than incidentally tripping the rate
+        # limiter instead — see test_analyze_rate_limited_on_rapid_repeat_calls
+        # for that path specifically.
+        with db._connect() as conn:
+            conn.execute(
+                "UPDATE subscribers SET last_request_at = ? WHERE token = ?",
+                (time.time() - server_app.MIN_ANALYZE_INTERVAL_SECONDS - 1, subscriber["token"]),
+            )
+
         resp2 = self.client.post("/v1/analyze", json={
             "token": subscriber["token"], "task": "work", "screenshot_b64": "abc",
             "elapsed_seconds": 1,
         })
         self.assertEqual(resp2.status_code, 429)
+        self.assertIn("Daily limit", resp2.json()["detail"])
         # Anthropic must not have been called for the rejected request.
+        self.assertEqual(mock_get_client.return_value.messages.create.call_count, 1)
+
+    @patch("server.app._get_client")
+    def test_analyze_rate_limited_on_rapid_repeat_calls(self, mock_get_client):
+        subscriber = db.get_or_create_by_google("sub-a", "a@b.com")
+        payload = {"onTask": True, "activity": "x", "reminder": "", "notes": ""}
+        mock_get_client.return_value.messages.create.return_value = _fake_message(0, 0, payload)
+
+        resp = self.client.post("/v1/analyze", json={
+            "token": subscriber["token"], "task": "work", "screenshot_b64": "abc",
+            "elapsed_seconds": 0,
+        })
+        self.assertEqual(resp.status_code, 200)
+
+        # Immediate repeat, well within MIN_ANALYZE_INTERVAL_SECONDS and still
+        # claiming elapsed_seconds=0 — this is exactly the tight-loop-while-
+        # under-reporting-usage abuse pattern the rate limiter exists to catch,
+        # since the daily cap alone can't see it (see db.check_rate_limit).
+        resp2 = self.client.post("/v1/analyze", json={
+            "token": subscriber["token"], "task": "work", "screenshot_b64": "abc",
+            "elapsed_seconds": 0,
+        })
+        self.assertEqual(resp2.status_code, 429)
+        self.assertIn("Too many requests", resp2.json()["detail"])
         self.assertEqual(mock_get_client.return_value.messages.create.call_count, 1)
 
     @patch("server.app._get_client")
