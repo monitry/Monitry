@@ -1,0 +1,69 @@
+name: Build Mac app
+
+# Builds Onitry.app and a .dmg on real Macs. Runs when the packaging code changes, on a version tag (v*, which
+# also publishes a GitHub Release), or by hand from the Actions tab. The .dmg is also kept as a workflow artifact.
+on:
+  push:
+    branches: ["claude/**", main]
+    paths:
+      - "packaging/**"
+      - "onitry_app.py"
+      - "requirements.txt"
+      - ".github/workflows/build-mac.yml"
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # to attach the .dmg to a release on a tag
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-latest        # Apple Silicon
+            arch: apple-silicon
+          - runner: macos-15-intel      # Intel Macs
+            arch: intel
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller pillow
+
+      - name: Python and Tk
+        run: python -c "import sys, tkinter; print(sys.version); print('Tk', tkinter.TkVersion)"
+
+      - name: Build the app and the .dmg
+        env:
+          ONITRY_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '0.0.0' }}
+        run: sh packaging/build_mac.sh "dist/Onitry-${{ matrix.arch }}.dmg"
+
+      - name: Open the app for a few seconds (it must start and stay up)
+        run: |
+          open dist/Onitry.app
+          sleep 8
+          pgrep -x Onitry && echo "Onitry is running"
+          pkill -x Onitry || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Onitry-${{ matrix.arch }}
+          path: dist/Onitry-${{ matrix.arch }}.dmg
+
+      - name: Attach to the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "${{ github.ref_name }}" >/dev/null 2>&1 || gh release create "${{ github.ref_name }}" --title "Onitry ${{ github.ref_name }}" --notes "Free. Bring your own Anthropic API key. Open the .dmg, drag Onitry to Applications, then right-click it and choose Open the first time."
+          gh release upload "${{ github.ref_name }}" "dist/Onitry-${{ matrix.arch }}.dmg" --clobber

@@ -1,6 +1,10 @@
 import os
 
 from core import edition as _edition  # pure helper, does not import config
+from core import paths  # pure helper, does not import config
+
+# Where Onitry keeps its files: the repo's data/ folder, or ~/Library/Application Support/Onitry in the packaged app.
+DATA_DIR = paths.data_dir(os.path.dirname(os.path.abspath(__file__)))
 
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 MODEL = "claude-sonnet-4-6"
@@ -15,20 +19,20 @@ CHECK_INTERVAL = 10
 MAX_TOKENS_PER_RESPONSE = 512
 
 # Path to the running context log
-CONTEXT_FILE = os.path.join(os.path.dirname(__file__), "data", "context.txt")
+CONTEXT_FILE = os.path.join(DATA_DIR, "context.txt")
 
 # Max chars from context log to send to Claude (keep tokens reasonable)
 CONTEXT_MAX_CHARS = 2000
 
 # Shared status file read by the menu bar app
-STATUS_FILE = os.path.join(os.path.dirname(__file__), "data", "status.json")
+STATUS_FILE = os.path.join(DATA_DIR, "status.json")
 
 # Browser-extension bridge (core/bridge.py): localhost port + pairing code file
 BRIDGE_PORT = int(os.environ.get("ONITRY_BRIDGE_PORT", "47323"))
-BRIDGE_TOKEN_FILE = os.path.join(os.path.dirname(__file__), "data", "bridge_token")
+BRIDGE_TOKEN_FILE = os.path.join(DATA_DIR, "bridge_token")
 
 # Persisted app settings (e.g. JPEG quality)
-SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "data", "settings.json")
+SETTINGS_FILE = os.path.join(DATA_DIR, "settings.json")
 
 # ---------------------------------------------------------------------------
 # Product model: Onitry is FREE. The user brings their own Anthropic API key

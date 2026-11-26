@@ -47,6 +47,7 @@ class TestHostProtocol(unittest.TestCase):
             tempfile.TemporaryDirectory() as tmp,
             mock.patch.object(host, "ROOT", tmp),
             mock.patch.object(host, "bridge_listening", return_value=False),
+            mock.patch.object(host, "installed_app", return_value=None),
             mock.patch.object(host.subprocess, "Popen") as popen,
         ):
             out = self.run_host({"cmd": "launch"})
@@ -55,6 +56,26 @@ class TestHostProtocol(unittest.TestCase):
         self.assertTrue(args[0][1].endswith("gui.py"))
         self.assertTrue(kwargs["start_new_session"])
         self.assertIsNot(kwargs["stdout"], None)
+
+    def test_launch_opens_the_installed_app(self):
+        with (
+            mock.patch.object(host, "bridge_listening", return_value=False),
+            mock.patch.object(host, "installed_app", return_value="/Applications/Onitry.app"),
+            mock.patch.object(host.subprocess, "Popen") as popen,
+        ):
+            out = self.run_host({"cmd": "launch"})
+        self.assertTrue(out["launched"])
+        self.assertTrue(out["app"])
+        self.assertEqual(popen.call_args[0][0], ["open", "/Applications/Onitry.app"])
+
+    def test_installed_app_looks_in_both_applications_folders(self):
+        with tempfile.TemporaryDirectory() as home:
+            os.makedirs(os.path.join(home, "Applications", "Onitry.app"))
+            with (
+                mock.patch.object(host.os.path, "isdir", side_effect=lambda p: p.startswith(home) and p.endswith("Onitry.app")),
+                mock.patch.object(host.os.path, "expanduser", side_effect=lambda p: p.replace("~", home)),
+            ):
+                self.assertEqual(host.installed_app(), os.path.join(home, "Applications", "Onitry.app"))
 
     def test_unknown_command(self):
         self.assertFalse(self.run_host({"cmd": "rm -rf"})["ok"])

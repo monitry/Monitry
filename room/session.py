@@ -10,12 +10,13 @@ import os
 import cv2
 
 from core import context as context_log
+from core import paths
 from room.analyzer import analyze_screen, forget_screen, reset_session
 from room.detect import detect_screens
 from room.report import RoomReport
 from room.tracker import ScreenTracker
 
-ROOM_DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "room")
+ROOM_DATA_DIR = os.path.join(paths.data_dir(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "room")
 MAX_WIDTH = 800    # per-screen image sent to Claude — cost control, matches capture/screen.py
 JPEG_QUALITY = 75
 

@@ -55,9 +55,22 @@ def bridge_listening(port: int = config.BRIDGE_PORT) -> bool:
         return False
 
 
+def installed_app() -> str | None:
+    """The packaged app, if it is installed (drag it to Applications, or ~/Applications)."""
+    for folder in ("/Applications", os.path.expanduser("~/Applications")):
+        path = os.path.join(folder, "Onitry.app")
+        if os.path.isdir(path):
+            return path
+    return None
+
+
 def launch_gui() -> dict:
     if bridge_listening():
         return {"ok": True, "launched": False, "already_running": True}
+    app = installed_app()
+    if app:
+        subprocess.Popen(["open", app], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return {"ok": True, "launched": True, "app": True}
     os.makedirs(os.path.join(ROOT, "data"), exist_ok=True)
     log = open(os.path.join(ROOT, "data", "native_launch.log"), "ab")
     # Never inherit stdout: it's Chrome's message pipe. New session so closing
