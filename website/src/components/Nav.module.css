@@ -64,3 +64,13 @@
 }
 
 .cta:hover { background: var(--green-h); }
+
+.logo, .tab, .cta { display: inline-block; text-decoration: none; }
+.tab:focus-visible, .cta:focus-visible, .logo:focus-visible { outline: 2px solid var(--green-h); outline-offset: 2px; }
+
+@media (max-width: 640px) {
+  .nav { padding: 0 14px; }
+  .tab { padding: 6px 8px; font-size: 13px; }
+  .cta { padding: 7px 10px; font-size: 13px; }
+  .tabs { gap: 0; }
+}
