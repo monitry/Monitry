@@ -305,8 +305,8 @@
   font-size: 12px;
   line-height: 1.9;
   color: var(--fg);
-  overflow-x: auto;
-  white-space: pre;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .logOn  { color: #3fb950; }

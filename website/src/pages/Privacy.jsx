@@ -227,9 +227,6 @@ export default function Privacy() {
             </a>
             . If this page changes, the date at the top changes.
           </p>
-          <p className={styles.footerNav}>
-            <a href="#/terms">Terms</a> &middot; <a href="#/about">About</a> &middot; <a href="#/docs">Docs</a>
-          </p>
         </section>
       </div>
     </main>

@@ -50,7 +50,7 @@ export default function ClassWatch() {
           <button type="button" className={styles.btnPrimary} onClick={() => scrollToId("requirements")}>
             What you need
           </button>
-          <a className={styles.btnOutline} href="#/docs">
+          <a className={styles.btnOutline} href="#/docs/install">
             Setup basics in the docs
           </a>
         </div>
@@ -136,7 +136,7 @@ export default function ClassWatch() {
           <ul className={styles.plainList}>
             <li>
               <strong>A Mac, set up for Full Focus.</strong> ClassWatch uses the same base setup (see the{" "}
-              <a href="#/docs">docs</a>).
+              <a href="#/docs/install">docs</a>).
             </li>
             <li>
               <strong>A camera</strong>, and macOS Camera permission for the terminal you run it from.
@@ -240,18 +240,6 @@ python room_cli.py --task "working on the lab assignment" --interval 20`}
         </div>
       </section>
 
-      <footer className={styles.footer}>
-        <div className={styles.footerInner}>
-          <span className={styles.footerLogo}>
-            Onit<span>ry</span>
-          </span>
-          <span>Free. Bring your own Anthropic API key.</span>
-          <span>
-            <a href="#/privacy">Privacy</a> &middot; <a href="#/terms">Terms</a> &middot;{" "}
-            <a href="#/about">About</a>
-          </span>
-        </div>
-      </footer>
     </main>
   );
 }

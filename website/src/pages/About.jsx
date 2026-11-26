@@ -203,9 +203,6 @@ export default function About() {
           </a>
         </section>
 
-        <p className={styles.footerNav}>
-          <a href="#/privacy">Privacy</a> &middot; <a href="#/terms">Terms</a> &middot; <a href="#/docs">Docs</a>
-        </p>
       </div>
     </main>
   );

@@ -93,3 +93,25 @@ people ask for it.
   to set a spending limit in the Anthropic console.
 - **Screen Recording permission** is a trust moment. The docs must say exactly why it's needed and what is sent.
 - **Support load** for a free app with a terminal install: put the troubleshooting list in the docs before launch.
+
+## Status (2026-11-26)
+
+Done on branch `claude/bold-davinci-spz652` (not merged to `main`, no pull request opened):
+
+- [x] Product: free, bring-your-own-key is the default; paid code kept but unreachable (`ONITRY_ENABLE_LEGACY_EDITIONS=1`).
+- [x] `main` merged in (idle detection, ClassWatch, CI, two-product site); 236 tests and `ruff` pass.
+- [x] Facts audited (`docs/WEBSITE_BRIEF.md`); site rewritten: Home, Full Focus, ClassWatch (experimental), Docs, About, Privacy, Terms.
+- [x] Browser QA at 360, 768 and 1280 px: no console errors, no broken links, no banned wording, focus visible.
+- [x] `website/node_modules` untracked.
+
+Still open, in order:
+
+1. **Decide** (section 0 above): repo public + license, one name, contact address, ClassWatch in or out, model choice.
+2. **Fix small product issues the audit found:** `cli.py` and the menu-bar "Ask Claude" box use Sonnet (about 3x the cost);
+   `cli.py` ignores the Keychain; the weekly review model (`claude-opus-5-5`) has no price in the app's cost table;
+   `room_cli.py` needs a key just to print `--help`; the GUI and `BRIDGE.md` disagree on where the pairing code goes.
+3. **Packaging** (needs a Mac): developer install via a tagged release first; signed `.app` later.
+4. **Legal review** of Privacy and Terms; add a real name or story to the About page (marker in `About.jsx`).
+5. **Merge and deploy:** open the pull request, merge, tag `v1.0.0`, build the site, push `dist/` to `website-deploy`,
+   upload to Porkbun, re-run the browser checks on the real domain. Publish the Timecheck extension (or link it) first.
+6. **Decide about git history:** it contains two personal commit emails and an early real activity log.

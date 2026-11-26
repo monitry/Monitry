@@ -112,9 +112,6 @@ export default function Terms() {
             What Onitry does with your data is described on the <a href="#/privacy">Privacy</a> page. If
             these terms change, the date at the top changes.
           </p>
-          <p className={styles.footerNav}>
-            <a href="#/privacy">Privacy</a> &middot; <a href="#/about">About</a> &middot; <a href="#/docs">Docs</a>
-          </p>
         </section>
       </div>
     </main>

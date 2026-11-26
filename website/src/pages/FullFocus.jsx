@@ -1,5 +1,4 @@
 import styles from "./Home.module.css";
-import { SiteFooter } from "./Home.jsx";
 import { ANTHROPIC_CONSOLE_URL } from "../site.js";
 
 // ── Subcomponents ──────────────────────────────────────────────────────────
@@ -90,7 +89,7 @@ export default function FullFocus() {
         </p>
         <p className={styles.offerLine}>Free. Bring your own Anthropic API key.</p>
         <div className={styles.heroCta}>
-          <a className={styles.btnPrimary} href="#/docs">Install guide</a>
+          <a className={styles.btnPrimary} href="#/docs/install">Install guide</a>
           <button type="button" className={styles.btnOutline} onClick={() => scrollToId("how-it-works")}>
             See how it works
           </button>
@@ -259,14 +258,13 @@ export default function FullFocus() {
               <li>macOS only, with a terminal install for now.</li>
             </ul>
             <div className={styles.cardActions}>
-              <a className={styles.btnPrimary} href="#/docs">Install guide</a>
-              <a className={styles.textLink} href="#/docs">See the cost arithmetic</a>
+              <a className={styles.btnPrimary} href="#/docs/install">Install guide</a>
+              <a className={styles.textLink} href="#/docs/costs">See the cost arithmetic</a>
             </div>
           </article>
         </div>
       </section>
 
-      <SiteFooter />
     </main>
   );
 }

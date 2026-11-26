@@ -1,7 +1,7 @@
 import styles from "./Home.module.css";
 import { ANTHROPIC_CONSOLE_URL, ANTHROPIC_PRIVACY_URL, ISSUES_URL } from "../site.js";
 
-// ── Shared pieces (FullFocus.jsx imports SiteFooter too) ───────────────────
+// ── Shared pieces (App.jsx renders SiteFooter under every page) ─────────────
 
 export function SiteFooter() {
   return (
@@ -11,6 +11,7 @@ export function SiteFooter() {
         <span>© 2026 Onitry</span>
         <nav aria-label="Footer" className={styles.footerLinks}>
           <a href="#/docs">Docs</a>
+          <a href="#/about">About</a>
           <a href="#/privacy">Privacy</a>
           <a href="#/terms">Terms</a>
           <a href={ISSUES_URL} target="_blank" rel="noopener noreferrer">GitHub issues</a>
@@ -57,7 +58,7 @@ export default function Home() {
         </p>
         <p className={styles.offerLine}>Free. Bring your own Anthropic API key.</p>
         <div className={styles.heroCta}>
-          <a className={styles.btnPrimary} href="#/docs">Install guide</a>
+          <a className={styles.btnPrimary} href="#/docs/install">Install guide</a>
           <a className={styles.btnOutline} href="#/fullfocus">See Full Focus</a>
         </div>
         <span className={styles.heroNote}>
@@ -158,7 +159,7 @@ export default function Home() {
             </Fact>
           </div>
           <div className={styles.linkRow}>
-            <a className={styles.textLink} href="#/docs">See the cost arithmetic in the docs</a>
+            <a className={styles.textLink} href="#/docs/costs">See the cost arithmetic in the docs</a>
           </div>
         </div>
       </section>
@@ -214,7 +215,7 @@ export default function Home() {
             <p>
               There is no installer or .app yet. You need a Mac, Python 3.10 or newer with Tk, and an Anthropic API
               key. macOS will ask for Screen Recording permission for the app that runs Python, usually your terminal.
-              The <a className={styles.textLink} href="#/docs">install guide</a> has the steps.
+              The <a className={styles.textLink} href="#/docs/install">install guide</a> has the steps.
             </p>
             <h3>Does it run on Windows or Linux?</h3>
             <p>No. It is macOS only: the alerts use macOS tools (osascript and say).</p>
@@ -227,7 +228,6 @@ export default function Home() {
         </div>
       </section>
 
-      <SiteFooter />
     </main>
   );
 }

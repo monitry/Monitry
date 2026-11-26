@@ -34,7 +34,7 @@ export default function Nav({ current }) {
           ))}
         </ul>
 
-        <a className={styles.cta} href="#/docs">
+        <a className={styles.cta} href="#/docs/install">
           Get Onitry — free
         </a>
 
@@ -62,7 +62,7 @@ export default function Nav({ current }) {
               {tab.label}
             </a>
           ))}
-          <a className={styles.mobileCta} href="#/docs" onClick={close}>
+          <a className={styles.mobileCta} href="#/docs/install" onClick={close}>
             Get Onitry — free
           </a>
         </div>

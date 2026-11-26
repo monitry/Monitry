@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import Nav from "./components/Nav.jsx";
-import Home from "./pages/Home.jsx";
+import Home, { SiteFooter } from "./pages/Home.jsx";
 import FullFocus from "./pages/FullFocus.jsx";
 import ClassWatch from "./pages/ClassWatch.jsx";
 import Docs from "./pages/Docs.jsx";
@@ -24,9 +24,11 @@ const TITLES = {
 
 export const hrefFor = (id) => (id === "home" ? "#/" : `#/${id}`);
 
-function pageFromHash() {
-  const id = window.location.hash.replace(/^#\/?/, "").split(/[?#]/)[0] || "home";
-  return PAGES[id] ? id : "home";
+// "#/docs/install" is the docs page, scrolled to its Install section.
+function routeFromHash() {
+  const [id = "", section = ""] = window.location.hash.replace(/^#\/?/, "").split(/[?#]/)[0].split("/");
+  const page = PAGES[id] ? id : "home";
+  return { page, section: page === "docs" ? section : "" };
 }
 
 // Pages call onNav("docs") to move around; it just changes the URL.
@@ -35,16 +37,21 @@ const onNav = (id) => {
 };
 
 export default function App() {
-  const [page, setPage] = useState(pageFromHash);
+  const [route, setRoute] = useState(routeFromHash);
+  const { page, section } = route;
 
   useEffect(() => {
-    const onHash = () => {
-      setPage(pageFromHash());
-      window.scrollTo(0, 0);
-    };
+    const onHash = () => setRoute(routeFromHash());
     window.addEventListener("hashchange", onHash);
     return () => window.removeEventListener("hashchange", onHash);
   }, []);
+
+  // After every route change: top of the page, or the requested docs section.
+  useEffect(() => {
+    const target = section && document.getElementById(`sec-${section}`);
+    if (target) target.scrollIntoView({ behavior: "instant" });
+    else window.scrollTo({ top: 0, behavior: "instant" });
+  }, [page, section]);
 
   useEffect(() => {
     document.title = page === "home" ? `Onitry — ${TITLES.home}` : `${TITLES[page]} — Onitry`;
@@ -55,6 +62,7 @@ export default function App() {
     <>
       <Nav current={page} />
       <Page onNav={onNav} />
+      <SiteFooter />
     </>
   );
 }

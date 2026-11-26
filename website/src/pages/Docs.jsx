@@ -511,7 +511,7 @@ function Costs() {
       </ul>
       <p>
         So a rough range is <strong>$0.06 to $0.20 per hour</strong>. For scale, 4 hours a day for
-        20 days is 80 hours, or about $7 to $16 a month at that range. The theoretical ceiling is a
+        20 days is 80 hours, or about $5 to $16 across those 20 days at that range. The theoretical ceiling is a
         check roughly every 10 seconds (about 300 an hour, about $0.75), but popups pause checking and
         the grace period adds a gap, so you are unlikely to get near it.
       </p>
@@ -1106,11 +1106,17 @@ export default function Docs() {
   const jump = (id) => {
     const section = document.getElementById(`sec-${id}`);
     if (!section) return;
-    section.scrollIntoView();
-    const heading = headingRefs.current[id];
-    if (heading) heading.focus({ preventScroll: true });
     setActive(id);
+    // On small screens the contents list sits above the article and collapses when a section is chosen,
+    // which moves everything up. Scroll after that layout change, not before it.
     if (!wideScreen()) setNavOpen(false);
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        section.scrollIntoView({ behavior: "instant" });
+        const heading = headingRefs.current[id];
+        if (heading) heading.focus({ preventScroll: true });
+      })
+    );
   };
 
   return (
