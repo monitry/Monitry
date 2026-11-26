@@ -1,3 +1,5 @@
+"""LEGACY (not offered): the paid-BYOK license check is kept for possible revival.
+The free edition never calls it — see tests/test_edition.py."""
 import unittest
 from unittest.mock import MagicMock, patch
 

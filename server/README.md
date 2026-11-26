@@ -1,5 +1,13 @@
 # Onitry Server
 
+> **Not used by the free edition.** Onitry is free and bring-your-own-key: the
+> desktop app never contacts this server, and nothing here was ever deployed.
+> It backs only the LEGACY `byok` (paid license) and `managed` (Google sign-in +
+> subscription) editions, which are not offered and are unreachable unless
+> `ONITRY_ENABLE_LEGACY_EDITIONS=1`. Kept so the paid design can be revived, or
+> deleted later (together with `core/license.py`, `core/auth.py`, and the
+> managed paths in `ai/client.py` / `gui.py`).
+
 Backs two of Onitry's three product editions:
 
 - **`byok`** ($30 one-time) — the desktop app calls Anthropic directly with the

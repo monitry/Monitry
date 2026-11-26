@@ -21,7 +21,8 @@ _session_checks = 0
 
 
 class DailyLimitReached(Exception):
-    """Managed edition only — the server rejected the check because today's cap is used up."""
+    """LEGACY managed edition only (not offered) — the server rejected the check because
+    today's cap is used up. Never raised in the free edition."""
 
 # Errors worth a short retry — transient network/server issues, not bad requests.
 _RETRYABLE_ERRORS = (
@@ -80,10 +81,12 @@ Social media, YouTube, games, or unrelated browsing is off-task."""
 
 
 def analyze(task: str, screenshot_b64: str, context: str, elapsed_seconds: float = 0.0) -> dict:
-    """Send screenshot + context to Claude (directly, or via the managed proxy) and
-    return the parsed JSON response. `elapsed_seconds` (time since the last check) is
-    only used in managed mode, to report against the server-enforced daily cap."""
-    if config.MANAGED_MODE and config.MANAGED_TOKEN:
+    """Send screenshot + context to Claude with the user's own key and return the parsed
+    JSON response. The free edition only ever talks to Anthropic.
+
+    The legacy managed proxy (server/) is reachable only when
+    config.LEGACY_EDITIONS_ENABLED is on; `elapsed_seconds` is used only on that path."""
+    if config.LEGACY_EDITIONS_ENABLED and config.MANAGED_MODE and config.MANAGED_TOKEN:
         return _analyze_managed(task, screenshot_b64, context, elapsed_seconds)
     return _analyze_direct(task, screenshot_b64, context)
 
@@ -141,7 +144,7 @@ Analyze the screenshot and determine if the user is on task."""
 
 
 def _analyze_managed(task: str, screenshot_b64: str, context: str, elapsed_seconds: float) -> dict:
-    """Same contract as _analyze_direct, but via server/ so no Anthropic key is needed.
+    """LEGACY (not offered). Same contract as _analyze_direct, but via server/ so no Anthropic key is needed.
     Model is never sent — the server always uses Haiku for managed requests regardless."""
     global notes, _session_cost, _session_checks
 

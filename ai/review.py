@@ -40,7 +40,7 @@ def _client() -> anthropic.Anthropic:
 def weekly_review(stats: dict) -> dict:
     """Return {"text": markdown, "model": served-by model id}. Raises ReviewUnavailable."""
     if config.MANAGED_MODE or not config.ANTHROPIC_API_KEY:
-        raise ReviewUnavailable("The AI review needs an Anthropic API key in Onitry (dev or BYOK edition).")
+        raise ReviewUnavailable("The AI review needs an Anthropic API key in Onitry — click 'Set Key'.")
 
     try:
         response = _client().beta.messages.create(

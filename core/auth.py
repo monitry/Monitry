@@ -1,4 +1,8 @@
-""""Sign in with Google" for a desktop app — the loopback-redirect flow from RFC 8252.
+"""LEGACY — NOT OFFERED. Onitry is free and has no accounts; nothing in the default
+edition ever calls this module. Only reachable with ONITRY_ENABLE_LEGACY_EDITIONS=1
+and ONITRY_EDITION=managed. Kept so the paid design can be revived, or deleted with server/.
+
+"Sign in with Google" for a desktop app — the loopback-redirect flow from RFC 8252.
 
 Blocking by design (waits on the user's browser + a local HTTP callback) — the
 GUI is expected to run login_with_google() on a background thread, not the

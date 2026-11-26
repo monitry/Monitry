@@ -1,4 +1,8 @@
-"""BYOK edition license check — verified once against server/, then cached locally.
+"""LEGACY — NOT OFFERED. Onitry is free and the default edition never calls
+this module; it only runs if ONITRY_ENABLE_LEGACY_EDITIONS=1 and
+ONITRY_EDITION=byok. Kept so the paid design can be revived, or deleted with server/.
+
+Paid-BYOK edition license check — verified once against server/, then cached locally.
 
 After a $30 one-time Stripe purchase, the webhook mints a license token
 (see server/app.py + server/db.py's PLAN_BYOK). The desktop app just needs

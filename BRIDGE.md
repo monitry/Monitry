@@ -13,8 +13,8 @@ and drive monitoring:
   site passes and locks its distraction gate for 10 minutes.
 - **Weekly review:** the extension sends the week's stats to `/v1/review`, and
   Onitry writes a short review with Claude (`ai/review.py`, `config.REVIEW_MODEL`)
-  on its own API key. The extension never holds a key. This needs the dev or
-  BYOK edition.
+  on its own API key. The extension never holds a key. This needs an Anthropic
+  API key set in Onitry (the free edition's normal setup).
 - **Launch Onitry:** a native-messaging host lets the extension start Onitry when
   it isn't running (see below).
 

@@ -10,13 +10,18 @@ class _DirectPathCalled(Exception):
 
 
 class TestManagedMode(unittest.TestCase):
+    """LEGACY managed proxy (not offered). Only reachable with the legacy flag on."""
+
     def setUp(self):
+        self._orig_legacy = config.LEGACY_EDITIONS_ENABLED
+        config.LEGACY_EDITIONS_ENABLED = True
         self._orig_managed_mode = config.MANAGED_MODE
         self._orig_managed_token = config.MANAGED_TOKEN
         self._orig_managed_url = config.MANAGED_API_URL
         client.reset_session()
 
     def tearDown(self):
+        config.LEGACY_EDITIONS_ENABLED = self._orig_legacy
         config.MANAGED_MODE = self._orig_managed_mode
         config.MANAGED_TOKEN = self._orig_managed_token
         config.MANAGED_API_URL = self._orig_managed_url
@@ -128,6 +133,32 @@ class TestManagedMode(unittest.TestCase):
 
         client.analyze("task", "b64", "")
         self.assertEqual(config.MANAGED_DAILY_REMAINING_SECONDS, 42.0)
+
+
+class TestManagedProxyUnreachableByDefault(unittest.TestCase):
+    """With the legacy flag off (the default), analyze() never talks to an Onitry server,
+    even if stale managed state is present."""
+
+    def setUp(self):
+        self._orig = (config.LEGACY_EDITIONS_ENABLED, config.MANAGED_MODE, config.MANAGED_TOKEN)
+        client.reset_session()
+
+    def tearDown(self):
+        config.LEGACY_EDITIONS_ENABLED, config.MANAGED_MODE, config.MANAGED_TOKEN = self._orig
+        client.reset_session()
+
+    @patch("ai.client.httpx.post")
+    @patch("ai.client._create_with_retry")
+    def test_stale_managed_state_still_goes_direct(self, mock_direct, mock_post):
+        config.LEGACY_EDITIONS_ENABLED = False
+        config.MANAGED_MODE = True
+        config.MANAGED_TOKEN = "onitry_sometoken"
+        mock_direct.side_effect = _DirectPathCalled()
+        mock_post.side_effect = AssertionError("must not call any Onitry server")
+
+        with self.assertRaises(_DirectPathCalled):
+            client.analyze("task", "b64", "")
+        mock_post.assert_not_called()
 
 
 if __name__ == "__main__":

@@ -48,8 +48,8 @@ class OnitryBar(rumps.App):
             None,
         ]
 
-        # Managed-edition users have no direct Anthropic key — this chat feature
-        # calls Anthropic directly, so it's only available in dev/byok builds.
+        # This chat feature calls Anthropic directly with the user's own key, so it's
+        # unavailable in the legacy managed edition (not offered; never the default).
         if config.EDITION != "managed":
             self._chat_item = rumps.MenuItem("Ask Claude...", callback=self.open_chat)
             self.menu.append(self._chat_item)
@@ -193,7 +193,7 @@ class OnitryBar(rumps.App):
 
         self._task_item.title = task if task else ""
         if status == "idle" or config.EDITION == "managed":
-            self._cost_item.title = ""  # managed edition shows remaining time in the GUI instead
+            self._cost_item.title = ""  # legacy managed edition (not offered) shows remaining time in the GUI instead
         else:
             self._cost_item.title = f"${cost:.3f} spent"
 

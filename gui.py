@@ -20,6 +20,7 @@ from alerts import notifier
 from core import auth as google_auth
 from core import bridge as onitry_bridge
 from core import context as context_log
+from core import edition as edition_rules
 from core import license as byok_license
 from core import settings as app_settings
 from core import status as status_file
@@ -309,8 +310,9 @@ class OnitryApp:
         self._history_btn.grid(row=0, column=1, padx=(6, 0))
         r += 1
 
-        # ── Credentials — differ by edition ──
-        if config.EDITION in ("dev", "byok"):
+        # ── Credentials — free/dev: just the user's own Anthropic key.
+        # License / Google rows exist only for the LEGACY editions (not offered). ──
+        if edition_rules.uses_own_api_key(config.EDITION):
             r = self._build_api_key_row(outer, r)
         if config.EDITION == "byok":
             r = self._build_license_row(outer, r)
@@ -428,7 +430,7 @@ class OnitryApp:
         if stored:
             config.ANTHROPIC_API_KEY = stored
 
-        if config.EDITION == "dev":
+        if config.EDITION == "dev" and config.LEGACY_EDITIONS_ENABLED:
             config.MANAGED_MODE = self._settings.get("managed_mode", False)
             managed_token = keyring.get_password(KEYCHAIN_SERVICE, KEYCHAIN_MANAGED_USER)
             if managed_token:
@@ -686,7 +688,7 @@ class OnitryApp:
             ).pack(fill="x", pady=(0, 12), ipady=3)
 
         res_var = tk.StringVar(value=self.res_var.get())
-        if config.EDITION in ("dev", "byok"):
+        if edition_rules.uses_own_api_key(config.EDITION):
             tk.Label(frame, text="Resolution:", bg=BG, fg=FG, anchor="w").pack(fill="x", pady=(0, 4))
             ttk.Combobox(
                 frame, textvariable=res_var, values=list(RESOLUTIONS.keys()), state="readonly",
@@ -704,7 +706,7 @@ class OnitryApp:
             tk.Label(frame, text="Medium (free plan — upgrade below for High)",
                      bg=BG, fg=FG2, anchor="w").pack(fill="x", pady=(0, 12))
 
-        if config.EDITION in ("dev", "byok"):
+        if edition_rules.uses_own_api_key(config.EDITION):
             tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
 
             tk.Label(frame, text="Screenshot quality (JPEG):", bg=BG, fg=FG, anchor="w",
@@ -759,10 +761,10 @@ class OnitryApp:
 
         tk.Frame(frame, bg=BG3, height=1).pack(fill="x", pady=(0, 14))
 
-        # Dev-only: a way to test the managed proxy path without a real Google account.
+        # Dev + LEGACY flag only: test the (not offered) managed proxy without a Google account.
         managed_var = tk.BooleanVar(value=config.MANAGED_MODE)
         managed_token_var = tk.StringVar(value=config.MANAGED_TOKEN)
-        if config.EDITION == "dev":
+        if config.EDITION == "dev" and config.LEGACY_EDITIONS_ENABLED:
             tk.Label(frame, text="Managed proxy (dev testing):", bg=BG, fg=FG, anchor="w",
                      ).pack(fill="x", pady=(0, 4))
             tk.Checkbutton(
@@ -837,6 +839,7 @@ class OnitryApp:
             }
             if config.EDITION == "dev":
                 settings_to_save["model_label"] = model_var.get()
+            if config.EDITION == "dev" and config.LEGACY_EDITIONS_ENABLED:
                 config.MANAGED_MODE = managed_var.get()
                 token = managed_token_var.get().strip()
                 if token:
@@ -910,27 +913,29 @@ class OnitryApp:
         """Applies per-edition gating + forces model/resolution. Returns max_width, or
         None (having already logged why) if a credential check failed."""
         if config.EDITION == "dev":
-            using_managed = config.MANAGED_MODE and config.MANAGED_TOKEN
+            using_managed = (
+                config.LEGACY_EDITIONS_ENABLED and config.MANAGED_MODE and config.MANAGED_TOKEN
+            )
             if not using_managed and not config.ANTHROPIC_API_KEY:
-                self._enqueue_log(
-                    "ERROR: No API key set — click 'Set Key', or enable a managed subscription in Settings."
-                )
+                self._enqueue_log("ERROR: No API key set — click 'Set Key'.")
                 return None
             config.MODEL = MODELS[self.model_var.get()]
             return RESOLUTIONS[self.res_var.get()]
 
-        if config.EDITION == "byok":
-            if not config.ANTHROPIC_API_KEY:
-                self._enqueue_log("ERROR: No API key set — click 'Set Key'.")
-                return None
-            if not config.BYOK_LICENSE_VERIFIED:
-                self._enqueue_log("ERROR: License not verified — click 'Enter Key' under License.")
+        if config.EDITION in (edition_rules.FREE, edition_rules.LEGACY_BYOK):
+            # Free: own key only, no network check of any kind. (Legacy byok additionally
+            # requires its cached license flag — judged locally, never re-verified here.)
+            error = edition_rules.start_error(
+                config.EDITION, config.ANTHROPIC_API_KEY, config.BYOK_LICENSE_VERIFIED
+            )
+            if error:
+                self._enqueue_log(error)
                 return None
             config.MANAGED_MODE = False
             config.MODEL = config.HAIKU_MODEL
             return RESOLUTIONS[self.res_var.get()]
 
-        # managed
+        # legacy managed (not offered; only with ONITRY_ENABLE_LEGACY_EDITIONS=1)
         if not config.MANAGED_TOKEN:
             self._enqueue_log("ERROR: Sign in with Google first.")
             return None
