@@ -9,26 +9,26 @@ Two AI-powered focus-monitoring products, one codebase, one site
   passive observer with no popups — finds every laptop/monitor in view and
   builds a per-screen activity log.
 
-This README mostly covers **Full Focus**, since it's the app with editions,
-a backend, and most of the setup steps. ClassWatch's setup/usage is documented
+This README mostly covers **Full Focus**, the app with most of the setup steps. ClassWatch's setup/usage is documented
 on the ClassWatch section of `website/` and in `room_cli.py`'s own `--help`.
 
-## Three product editions, one codebase (Full Focus)
+## Free, bring your own key
 
-`config.EDITION` (env var `ONITRY_EDITION`, default `dev`) picks which:
+Onitry is free. You bring your own Anthropic API key (saved in the macOS Keychain, or set `ANTHROPIC_API_KEY`).
+There is no license, subscription or account, and Onitry never contacts an Onitry server: only Anthropic is called,
+using your key. Set a monthly spending limit in the Anthropic console.
 
-| Edition   | Model    | Own API key? | Cost                              |
-| --------- | -------- | ------------- | ---------------------------------- |
-| `dev`     | any      | yes           | whatever you use — unrestricted, for development/testing |
-| `byok`    | Haiku only | yes (+ a one-time $30 license) | your own Anthropic usage |
-| `managed` | Haiku only | no — Google sign-in | free (1hr/day) or $19/mo (10hr/day) |
+`config.EDITION` (env var `ONITRY_EDITION`) picks the mode:
+
+| Edition | Model | Key | Status |
+| --- | --- | --- | --- |
+| `free` (default) | Haiku 4.5 | your own | the product |
+| `dev` | any | your own | everything unlocked, for development and testing |
+| `byok`, `managed` | n/a | n/a | legacy paid designs, not offered; ignored unless `ONITRY_ENABLE_LEGACY_EDITIONS=1` (see `server/README.md`) |
 
 ```bash
-ONITRY_EDITION=byok conda run -n opencv-env python gui.py
+python gui.py
 ```
-
-See `server/README.md` for the licensing/subscription backend (Stripe +
-Google OAuth) behind `byok`/`managed`.
 
 ## Entry points
 
@@ -50,13 +50,12 @@ ClassWatch's entry point (`room_cli.py`) needs the heavier
   across photos, and builds a per-screen activity log. Passive observer — no
   popups/TTS, unlike Full Focus.
 - `core/` — logic shared across entry points: adaptive check interval,
-  session-log I/O, persisted settings, Google OAuth, BYOK license check
-- `ai/client.py` — talks to Claude directly (dev/byok editions)
+  session-log I/O, persisted settings; `auth.py`/`license.py` are legacy and unused by the free edition
+- `ai/client.py` — talks to Claude directly with your key
 - `capture/screen.py` — `mss`-based screenshot capture for Full Focus
 - `alerts/notifier.py` — macOS notification/TTS
-- `server/` — FastAPI backend for Full Focus's `managed`/`byok` editions
-  (Stripe billing, Google sign-in, usage-cap enforcement) — see
-  `server/README.md`. ClassWatch doesn't use this backend.
+- `server/` — LEGACY, not used by the free edition: the FastAPI backend of the old paid `managed`/`byok` designs
+  (Stripe, Google sign-in, usage caps). Never deployed; see `server/README.md`.
 - `website/` — Vite + React marketing site for Onitry, covering both products
 - `tests/` — stdlib `unittest`, no real network/API calls (everything mocked)
 
