@@ -60,34 +60,53 @@
 .heroNote {
   margin-top: 16px;
   font-size: 13px;
-  color: var(--fg3);
+  color: var(--fg2);
+  max-width: 520px;
 }
 
 .btnPrimary {
-  background: var(--green);
+  display: inline-block;
+  background: #238636; /* darker than --green so white text passes 4.5:1 */
   color: white;
   border: none;
   cursor: pointer;
   padding: 12px 24px;
   border-radius: 8px;
+  font-family: inherit;
   font-size: 15px;
   font-weight: 600;
+  line-height: 1.4;
+  text-align: center;
   transition: background 0.15s;
 }
-.btnPrimary:hover { background: var(--green-h); }
+.btnPrimary:hover { background: var(--green); }
 
 .btnOutline {
+  display: inline-block;
   background: transparent;
   color: var(--fg);
-  border: 1px solid var(--border);
+  border: 1px solid #555;
   cursor: pointer;
   padding: 12px 24px;
   border-radius: 8px;
+  font-family: inherit;
   font-size: 15px;
   font-weight: 500;
+  line-height: 1.4;
+  text-align: center;
   transition: border-color 0.15s;
 }
-.btnOutline:hover { border-color: #555; }
+.btnOutline:hover { border-color: var(--fg2); }
+
+/* Visible keyboard focus on everything interactive on these pages */
+.btnPrimary:focus-visible,
+.btnOutline:focus-visible,
+.textLink:focus-visible,
+.footerInner a:focus-visible {
+  outline: 2px solid var(--green-h);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
 
 /* ── App preview ────────────────────────────────────────────────────────── */
 .previewWrap {
@@ -144,7 +163,7 @@
 
 .field {
   flex: 1;
-  height: 32px;
+  min-height: 32px;
   border-radius: 6px;
   background: #252525;
   border: 1px solid var(--border);
@@ -294,29 +313,28 @@
 
 .feature p { font-size: 13px; color: var(--fg2); line-height: 1.65; }
 
-/* ── Pricing ────────────────────────────────────────────────────────────── */
-.pricingGrid {
-  display: flex;
-  flex-wrap: wrap;
+/* ── Cards (products, interrupts, offer) ───────────────────────────────── */
+.cardGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   align-items: stretch;
   gap: 24px;
-  margin-top: 56px;
+  margin-top: 48px;
 }
 
-.pricingCard {
-  flex: 1 1 340px;
-  max-width: 420px;
-  border: 1px solid var(--green);
+.card {
+  border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--bg3);
-  padding: 40px;
-  position: relative;
-  overflow: hidden;
+  padding: 32px;
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
 }
 
-.pricingCard::before {
+.cardFeatured { border-color: var(--green); }
+.cardFeatured::before {
   content: "";
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -324,77 +342,157 @@
   background: linear-gradient(90deg, var(--green), transparent);
 }
 
-.pricingName {
+.cardTag {
+  align-self: flex-start;
   font-size: 12px;
   font-weight: 700;
-  letter-spacing: 1.5px;
+  letter-spacing: 1.2px;
   text-transform: uppercase;
-  color: var(--green);
+  color: var(--green-h);
+  border: 1px solid var(--green);
+  border-radius: 999px;
+  padding: 2px 10px;
+  margin-bottom: 18px;
+}
+
+.cardTagExp {
+  color: #e3b341;
+  border-color: #e3b341;
+}
+
+.card h3 {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  margin-bottom: 8px;
+}
+
+.cardLead {
+  font-size: 15px;
+  color: var(--fg2);
+  line-height: 1.6;
   margin-bottom: 20px;
 }
 
-.price {
-  font-size: 56px;
-  font-weight: 800;
-  letter-spacing: -2px;
-  line-height: 1;
-  margin-bottom: 6px;
-}
-
-.price sup {
-  font-size: 22px;
-  font-weight: 600;
-  vertical-align: super;
-  letter-spacing: 0;
-}
-
-.period { font-size: 14px; color: var(--fg2); margin-bottom: 28px; }
-
-.pricingDivider { height: 1px; background: var(--border); margin: 28px 0; }
-
-.pricingList {
+.cardList {
   list-style: none;
-  margin-bottom: 32px;
-  flex: 1; /* fills remaining card height so both cards' CTAs align, list-length permitting */
+  margin-bottom: 28px;
+  flex: 1;
 }
 
-.pricingList li {
+.cardList li {
   display: flex;
   align-items: flex-start;
   gap: 10px;
   font-size: 14px;
+  line-height: 1.55;
   color: var(--fg2);
   padding: 5px 0;
 }
 
-.pricingList li::before {
-  content: "✓";
-  color: var(--green);
-  font-weight: 700;
+.cardList li::before {
+  content: "";
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: var(--green);
   flex-shrink: 0;
+  margin-top: 8px;
 }
 
-.pricingCta {
-  display: block;
-  width: 100%;
-  padding: 14px;
-  border-radius: 8px;
-  background: var(--green);
-  color: white;
+.cardListWarn li::before { background: #e3b341; }
+
+.cardCta { align-self: flex-start; }
+
+/* ── Home hero ──────────────────────────────────────────────────────────── */
+.heroHome {
+  min-height: 0;
+  padding: 140px 24px 96px;
+}
+
+.heroHome p { max-width: 560px; }
+
+.heroHome .offerLine {
+  max-width: none;
+  color: var(--fg);
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 32px;
+}
+
+/* ── Prose helpers ──────────────────────────────────────────────────────── */
+.textLink {
+  color: var(--green-h);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.textLink:hover { color: var(--fg); }
+
+.factGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
+  gap: 24px;
+  margin-top: 48px;
+}
+
+.fact h3 {
   font-size: 15px;
   font-weight: 700;
-  border: none;
-  cursor: pointer;
-  transition: background 0.15s;
+  margin-bottom: 8px;
 }
-.pricingCta:hover { background: var(--green-h); }
 
-.pricingNote {
-  text-align: center;
-  font-size: 12px;
-  color: var(--fg3);
-  margin-top: 14px;
+.fact p {
+  font-size: 14px;
+  color: var(--fg2);
+  line-height: 1.65;
 }
+
+.fact p + p { margin-top: 8px; }
+
+.callout {
+  margin-top: 32px;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--green);
+  border-radius: 8px;
+  background: var(--bg3);
+  font-size: 14px;
+  color: var(--fg2);
+  line-height: 1.65;
+  max-width: 720px;
+}
+
+.linkRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  margin-top: 28px;
+  font-size: 15px;
+}
+
+.faq { margin-top: 40px; max-width: 720px; }
+
+.faq h3 {
+  font-size: 17px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.faq p {
+  font-size: 15px;
+  color: var(--fg2);
+  line-height: 1.7;
+  margin-bottom: 32px;
+}
+
+.caption {
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--fg2);
+  text-align: left;
+}
+
+.altBg { background: var(--bg2); }
 
 /* ── Footer ─────────────────────────────────────────────────────────────── */
 .footer {
@@ -411,11 +509,50 @@
   flex-wrap: wrap;
   gap: 16px;
   font-size: 13px;
-  color: var(--fg3);
+  color: var(--fg2);
 }
 
-.footerInner a { color: var(--fg2); }
+.footerInner a { color: var(--fg2); text-decoration: underline; text-underline-offset: 3px; }
 .footerInner a:hover { color: var(--fg); }
+
+.footerLinks { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+
+@media (max-width: 600px) {
+  .section { padding: 64px 24px; }
+  .card { padding: 24px; }
+  .step { padding: 28px 24px; }
+  .feature { padding: 24px; }
+}
 
 .footerLogo { font-weight: 700; color: var(--fg2); }
 .footerLogo span { color: var(--green); }
+
+.cardSingle { max-width: 640px; margin-top: 48px; }
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px 24px;
+}
+
+/* `.hero p` would otherwise inflate paragraphs inside the preview window */
+.hero .previewCost {
+  text-align: center;
+  font-size: 11px;
+  color: var(--fg2);
+  max-width: none;
+  margin: -6px 0 12px;
+}
+
+.hero .log p {
+  font-size: inherit;
+  max-width: none;
+  margin: 0;
+  text-align: left;
+  color: inherit;
+}
+.hero .log p.logOn  { color: #3fb950; }
+.hero .log p.logOff { color: var(--red); }
+
+figure.previewWrap { margin-left: 0; margin-right: 0; }
