@@ -47,17 +47,21 @@ on the new site traces to it.
 Gate: the site builds, every link works, no claim without a source in step 2, it reads well on a phone, and QA has
 looked at it in a real browser at phone and desktop width.
 
-### 4. Make it installable (needs you, and a Mac)
+### 4. Make it installable (done, unsigned)
 
-This is what stands between "a website" and "a launch". Options, in order of effort:
+`.github/workflows/build-mac.yml` builds `Onitry.app` and a `.dmg` for Apple Silicon and Intel on real Macs
+(PyInstaller; app icon; data in `~/Library/Application Support/Onitry`). Each build runs `Onitry --selftest`, opens the
+app for 8 seconds and checks it is still running, then keeps the `.dmg` as a workflow artifact. Pushing a tag such as
+`v1.0.0` also creates a GitHub Release with both `.dmg` files attached. First run on 2026-11-26: both builds green.
 
-1. **Developer install** (days): a tagged GitHub release plus a one-command `install.sh` that creates the environment.
-   Honest about the audience ("for people comfortable with a terminal").
-2. **Packaged app** (about a week, needs macOS and an Apple Developer account, US$99/year): build a `.app` (py2app or
-   Briefcase), sign and notarize it, ship a `.dmg`. Without notarization macOS shows a scary warning to every user.
+What it is not: **notarized**. macOS asks each new user to approve the app once (Control-click, Open; on macOS 15 and
+later, System Settings, Privacy & Security, Open Anyway). The site says so. Removing that step needs an Apple Developer
+account (US$99/year), a Developer ID certificate and notarization; add them as repository secrets and extend the
+workflow when you decide to pay for it.
 
-Cannot be done from this Linux sandbox. Recommendation: launch with option 1, say so plainly, and do option 2 when
-people ask for it.
+Not yet tested by a person: dragging the `.dmg` to Applications, the first-run approval, setting the key in the
+Keychain from the bundled app, granting Screen Recording to "Onitry", and a real monitoring session. Do that on a Mac
+before announcing.
 
 ### 5. Repo hygiene and merge
 
@@ -107,10 +111,12 @@ Done on branch `claude/bold-davinci-spz652` (not merged to `main`, no pull reque
 Still open, in order:
 
 1. **Decide** (section 0 above): repo public + license, one name, contact address, ClassWatch in or out, model choice.
+   (Releases are only public if the repo is. macOS runners cost 10x minutes on private repos.)
 2. **Fix small product issues the audit found:** `cli.py` and the menu-bar "Ask Claude" box use Sonnet (about 3x the cost);
    `cli.py` ignores the Keychain; the weekly review model (`claude-opus-5-5`) has no price in the app's cost table;
    `room_cli.py` needs a key just to print `--help`; the GUI and `BRIDGE.md` disagree on where the pairing code goes.
-3. **Packaging** (needs a Mac): developer install via a tagged release first; signed `.app` later.
+3. **Try the app on a Mac** (section 4), then tag `v1.0.0` to publish the release. Publish the release BEFORE deploying the
+   site: the Download button points at the latest release and shows a 404 until one exists.
 4. **Legal review** of Privacy and Terms; add a real name or story to the About page (marker in `About.jsx`).
 5. **Merge and deploy:** open the pull request, merge, tag `v1.0.0`, build the site, push `dist/` to `website-deploy`,
    upload to Porkbun, re-run the browser checks on the real domain. Publish the Timecheck extension (or link it) first.

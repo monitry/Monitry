@@ -25,8 +25,9 @@ distraction gate and a journal. It talks to Onitry over a local bridge. Mention 
 3. **Do not claim "open source"** (there is no LICENSE file yet). Say "free". You may say the code is on GitHub only
    via the constants in `website/src/site.js`.
 4. **No personal email addresses.** Contact is GitHub Issues (`ISSUES_URL` in `site.js`).
-5. **Be honest about installation:** there is no installer or .app yet. It is a terminal install on macOS. Say who it is
-   for. Don't hide this.
+5. **Be honest about installation:** there is a downloadable Mac app (built by CI, Apple Silicon and Intel), and it is
+   not notarized, so macOS asks the user to approve it once. There is also a run-from-source route for people who prefer a
+   terminal. Say both plainly.
 6. **Be honest about cost and privacy** using the verified facts below. Never write "Anthropic never stores images".
 7. Use `site.js` constants for any URL. Don't hardcode `github.com/...` or an email.
 8. Hash routes: pages are `#/`, `#/fullfocus`, `#/classwatch`, `#/docs`, `#/about`, `#/privacy`, `#/terms`. Link with

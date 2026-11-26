@@ -95,7 +95,7 @@ export default function FullFocus() {
           </button>
         </div>
         <span className={styles.heroNote}>
-          macOS only. For now it is a terminal install, so it suits people who are comfortable in a terminal.
+          macOS only. Download the Mac app, or run it from source if you prefer a terminal.
         </span>
         <AppPreview />
       </section>
@@ -255,7 +255,7 @@ export default function FullFocus() {
                 </span>
               </li>
               <li>The app shows a running session cost, and the summary shows the total.</li>
-              <li>macOS only, with a terminal install for now.</li>
+              <li>macOS only. A downloadable Mac app, not yet notarized by Apple, or run it from source.</li>
             </ul>
             <div className={styles.cardActions}>
               <a className={styles.btnPrimary} href="#/docs/install">Install guide</a>

@@ -1,5 +1,5 @@
 import styles from "./Legal.module.css";
-import { ANTHROPIC_CONSOLE_URL, ANTHROPIC_PRIVACY_URL, ISSUES_URL, LAST_UPDATED } from "../site.js";
+import { ANTHROPIC_CONSOLE_URL, ANTHROPIC_PRIVACY_URL, APP_DATA_FOLDER, ISSUES_URL, LAST_UPDATED } from "../site.js";
 
 export default function Privacy() {
   return (
@@ -81,8 +81,8 @@ export default function Privacy() {
 
           <h3>What stays on your Mac</h3>
           <p>
-            Onitry writes these files to the <code>data</code> folder inside the Onitry folder you cloned.
-            They are plain text, not encrypted:
+            Onitry writes these files to the <code>data</code> folder inside the Onitry folder you cloned, or,
+            in the Mac app, to <code>{APP_DATA_FOLDER}</code>. They are plain text, not encrypted:
           </p>
           <ul>
             <li>
@@ -189,7 +189,7 @@ export default function Privacy() {
           <ol>
             <li>
               <strong>Files on your Mac.</strong> Delete the <code>data</code> folder inside the Onitry
-              folder. That removes everything Onitry saved, including ClassWatch&rsquo;s{" "}
+              folder, or for the Mac app the folder <code>{APP_DATA_FOLDER}</code>. That removes everything Onitry saved, including ClassWatch&rsquo;s{" "}
               <code>data/room</code>. If you passed <code>--report-path</code>, delete that report too.
             </li>
             <li>

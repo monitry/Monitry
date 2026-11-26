@@ -1,5 +1,5 @@
 import styles from "./Home.module.css";
-import { ANTHROPIC_CONSOLE_URL, ANTHROPIC_PRIVACY_URL, ISSUES_URL } from "../site.js";
+import { ANTHROPIC_CONSOLE_URL, ANTHROPIC_PRIVACY_URL, DOWNLOAD_URL, ISSUES_URL } from "../site.js";
 
 // ── Shared pieces (App.jsx renders SiteFooter under every page) ─────────────
 
@@ -58,12 +58,13 @@ export default function Home() {
         </p>
         <p className={styles.offerLine}>Free. Bring your own Anthropic API key.</p>
         <div className={styles.heroCta}>
-          <a className={styles.btnPrimary} href="#/docs/install">Install guide</a>
-          <a className={styles.btnOutline} href="#/fullfocus">See Full Focus</a>
+          <a className={styles.btnPrimary} href={DOWNLOAD_URL}>Download for Mac</a>
+          <a className={styles.btnOutline} href="#/docs/install">Install guide</a>
         </div>
         <span className={styles.heroNote}>
-          macOS only. For now it is a terminal install: you download the code and run it with Python.
-          It suits people who are comfortable in a terminal.
+          macOS only. Open the download, drag Onitry to Applications, and open it. The first time, macOS
+          asks you to approve it, because it is not notarized by Apple yet. Prefer a terminal? You can
+          also run it from source.
         </span>
       </section>
 
@@ -211,11 +212,12 @@ export default function Home() {
               what you pay Anthropic for your own API usage, which we estimate at $0.06 to $0.20 per hour for Full
               Focus.
             </p>
-            <h3>Why a terminal install?</h3>
+            <h3>How do I install it?</h3>
             <p>
-              There is no installer or .app yet. You need a Mac, Python 3.10 or newer with Tk, and an Anthropic API
-              key. macOS will ask for Screen Recording permission for the app that runs Python, usually your terminal.
-              The <a className={styles.textLink} href="#/docs/install">install guide</a> has the steps.
+              Download the Mac app, drag it to Applications and open it. You need a Mac and an Anthropic API key.
+              macOS asks you to approve the app the first time, because it is not notarized by Apple, and asks for
+              Screen Recording permission for Onitry. If you prefer a terminal you can run it from source. The{" "}
+              <a className={styles.textLink} href="#/docs/install">install guide</a> has both.
             </p>
             <h3>Does it run on Windows or Linux?</h3>
             <p>No. It is macOS only: the alerts use macOS tools (osascript and say).</p>

@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import {
   ANTHROPIC_CONSOLE_URL,
   ANTHROPIC_PRIVACY_URL,
+  APP_DATA_FOLDER,
   CLONE_URL,
+  DOWNLOAD_URL,
   ISSUES_URL,
 } from "../site.js";
 import styles from "./Docs.module.css";
@@ -65,7 +67,7 @@ function Requirements() {
           <code>say</code> for alerts and <code>rumps</code> for the optional menu bar app.
         </li>
         <li>
-          <strong>Python 3.11 with Tk.</strong> 3.11 is what the project&rsquo;s tests and linter
+          <strong>Python 3.11 with Tk, only if you run it from source.</strong> The Mac app has Python inside. 3.11 is what the project&rsquo;s tests and linter
           target. 3.10 is the lowest that can work (the code uses <code>X | None</code> type
           annotations). The window is built with Tk, so your Python needs it: the python.org
           installers and conda&rsquo;s Python include it. Check with{" "}
@@ -75,11 +77,11 @@ function Requirements() {
           <strong>An Anthropic API key.</strong> This is the only paid part. See section 3.
         </li>
         <li>
-          <strong>Screen Recording permission</strong> for the app that runs Python (usually your
-          terminal). See section 4.
+          <strong>Screen Recording permission</strong> for Onitry (or, if you run it from source, for
+          the terminal that runs it). See section 4.
         </li>
         <li>
-          <strong>A terminal you are comfortable with.</strong> There is no installer.
+          <strong>A terminal, only if you run it from source.</strong> The Mac app needs none.
         </li>
       </ul>
       <p>
@@ -93,12 +95,38 @@ function Requirements() {
 function Install() {
   return (
     <>
-      <Note title="Honest status" tone="warn">
-        There is no installer, no <code>.app</code> and no signed download yet. You clone the code,
-        create a Python environment and run a script. If that sounds like too much, wait for a
-        packaged version.
+      <h3>The easy way: the Mac app</h3>
+      <ol>
+        <li>
+          <Ext href={DOWNLOAD_URL}>Download the latest release</Ext> and pick the file for your Mac:{" "}
+          <strong>Apple Silicon</strong> (any Mac with an M-series chip) or <strong>Intel</strong>.
+          If you are not sure, the Apple menu, About This Mac, shows the chip.
+        </li>
+        <li>Open the <code>.dmg</code> and drag <strong>Onitry</strong> onto <strong>Applications</strong>.</li>
+        <li>
+          Open Onitry from Applications. <strong>macOS will refuse the first time</strong>, because the
+          app is not signed by an Apple-registered developer (that costs money, and Onitry is free).
+          Control-click the app and choose <strong>Open</strong>, then <strong>Open</strong> again. On
+          macOS 15 and later that option may be missing: try to open the app, then go to{" "}
+          <strong>System Settings, Privacy &amp; Security</strong>, scroll down and press{" "}
+          <strong>Open Anyway</strong>. You only do this once.
+        </li>
+        <li>
+          Set your API key and switch on Screen Recording (sections 3 and 4). After that, open Onitry
+          like any other app.
+        </li>
+      </ol>
+      <Note title="What the warning means" tone="warn">
+        The app is built from this project&rsquo;s public code by an automated build on GitHub, but it is
+        not notarized by Apple, which is why macOS asks you to approve it. If you would rather not
+        approve an unnotarized app, run it from source instead (below).
       </Note>
+      <p>
+        The app keeps its files in <code>{APP_DATA_FOLDER}</code> instead of a project folder. Everything
+        else in this guide works the same.
+      </p>
 
+      <h2>Or run it from source (terminal)</h2>
       <h3>1. Get the code</h3>
       <Code label="Clone the repository">{`git clone ${CLONE_URL}
 cd ${REPO_DIR}`}</Code>
@@ -204,9 +232,9 @@ function Permissions() {
       <h3>Screen Recording (required)</h3>
       <p>
         Without it, macOS does not let Python capture other apps&rsquo; windows (you typically get
-        only the desktop), so there is nothing useful for the AI to look at. Permission goes to the app that <em>runs</em> Python: your
-        terminal (Terminal, iTerm2 and so on), or the Python program itself if you launch it some
-        other way.
+        only the desktop), so there is nothing useful for the AI to look at. Permission goes to the
+        app you start: <strong>Onitry</strong> if you use the Mac app, or, if you run it from source,
+        the terminal that runs Python (Terminal, iTerm2 and so on).
       </p>
       <ol>
         <li>
@@ -214,10 +242,10 @@ function Permissions() {
           macOS versions the app is <em>System Preferences</em> and the page is{" "}
           <em>Security &amp; Privacy, Privacy, Screen Recording</em>.)
         </li>
-        <li>Switch on your terminal app. If it is not listed, start Onitry once and look again.</li>
+        <li>Switch on Onitry (or your terminal app). If it is not listed, start monitoring once and look again.</li>
         <li>
-          Quit the terminal completely (<kbd>Cmd</kbd>+<kbd>Q</kbd>), reopen it, activate your
-          environment and run <code>python gui.py</code> again.
+          Quit Onitry completely (<kbd>Cmd</kbd>+<kbd>Q</kbd>) and open it again. From source: quit the
+          terminal, reopen it, activate your environment and run <code>python gui.py</code>.
         </li>
       </ol>
 
@@ -609,7 +637,7 @@ function PrivacyInPractice() {
         <strong>No screenshot is ever written to disk.</strong> It is captured, encoded and sent from
         memory. There is no keylogger: the only input-related code asks macOS how long since your last
         input, nothing more. Everything Onitry does keep is in the <code>data/</code> folder inside the
-        project, as plain, unencrypted text:
+        project (or <code>{APP_DATA_FOLDER}</code> in the Mac app), as plain, unencrypted text:
       </p>
       <TableWrap label="Files in the data folder">
         <thead>
@@ -906,8 +934,8 @@ function Troubleshooting() {
 
       <QA q="Nothing happens, or the AI describes things that are not on my screen">
         <p>
-          Almost always Screen Recording. Check that your terminal is switched on under System
-          Settings, Privacy &amp; Security, Screen Recording (section 4), then quit the terminal
+          Almost always Screen Recording. Check that Onitry (or, from source, your terminal) is switched on under System
+          Settings, Privacy &amp; Security, Screen Recording (section 4), then quit it
           completely, reopen it and start again. Without the permission macOS does not hand over other
           apps&rsquo; windows, so the AI sees an empty desktop.
         </p>
@@ -1018,7 +1046,11 @@ function Troubleshooting() {
             Or open Keychain Access, search for <code>onitry</code> and delete the item.
           </li>
           <li>
-            Delete the project folder. This removes <code>data/</code> (your logs and settings) and a{" "}
+            Mac app: drag Onitry from Applications to the Bin and delete the folder{" "}
+            <code>{APP_DATA_FOLDER}</code> (your logs and settings).
+          </li>
+          <li>
+            From source: delete the project folder. This removes <code>data/</code> (your logs and settings) and a{" "}
             <code>.venv</code> inside it:
             <Code label="Delete the folder">{`cd ..
 rm -rf ${REPO_DIR}`}</Code>
@@ -1053,7 +1085,7 @@ const SECTIONS = [
   { id: "requirements", label: "Requirements", Body: Requirements,
     lead: "What you need before you start." },
   { id: "install", label: "Install", Body: Install,
-    lead: "Clone it, create an environment, run it." },
+    lead: "Download the Mac app, or run it from source." },
   { id: "api-key", label: "Your API key", Body: ApiKey,
     lead: "Create a key, set a spend limit, store the key." },
   { id: "permissions", label: "Permissions", Body: Permissions,
@@ -1154,7 +1186,7 @@ export default function Docs() {
           <p className={styles.intro}>
             Onitry is free. You bring your own Anthropic API key and pay Anthropic only for what you
             use. This page takes a Mac user who is comfortable with a terminal from nothing to a
-            running session. There is no installer yet, so it starts with a terminal.
+            running session. You can download a Mac app, or run it from source if you prefer a terminal.
           </p>
 
           {SECTIONS.map((s, i) => (

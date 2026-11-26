@@ -61,8 +61,8 @@ const FULLFOCUS_NOT_BUILT = [
     body: "Blocking distracting sites for the whole computer while a session runs. Onitry only watches and nudges today.",
   },
   {
-    title: "A packaged Mac app",
-    body: "Today you install from a terminal, which suits people comfortable with one. There is no installer or .app yet.",
+    title: "An Apple-notarized Mac app",
+    body: "The downloadable app is built openly on GitHub but is not notarized by Apple, so macOS asks you to approve it the first time. Notarization needs a paid Apple developer account.",
   },
   {
     title: "Windows and Linux",
