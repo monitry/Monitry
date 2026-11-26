@@ -1132,7 +1132,7 @@ export default function Docs() {
                     aria-current={active === s.id ? "true" : undefined}
                     onClick={() => jump(s.id)}
                   >
-                    <span className={styles.tocNum}>{i + 1}</span>
+                    <span className={styles.tocNum} aria-hidden="true">{i + 1}</span>
                     {s.label}
                   </button>
                 </li>
@@ -1166,7 +1166,7 @@ export default function Docs() {
                   headingRefs.current[s.id] = el;
                 }}
               >
-                <span className={styles.h2num}>{i + 1}</span>
+                <span className={styles.h2num} aria-hidden="true">{i + 1}</span>
                 {s.label}
               </h2>
               <p className={styles.sectionLead}>{s.lead}</p>
