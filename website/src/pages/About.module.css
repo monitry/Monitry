@@ -8,8 +8,12 @@
   padding: 72px 40px;
 }
 
+.header {
+  margin-bottom: 72px;
+}
+
 .section {
-  margin-bottom: 96px;
+  margin-bottom: 80px;
 }
 
 .label {
@@ -17,32 +21,58 @@
   font-weight: 700;
   letter-spacing: 1.5px;
   text-transform: uppercase;
-  color: var(--green);
+  color: var(--green-h);
   margin-bottom: 14px;
 }
 
-.title {
-  font-size: clamp(28px, 4vw, 40px);
+.pageTitle {
+  font-size: clamp(36px, 6vw, 56px);
   font-weight: 800;
-  letter-spacing: -1px;
-  line-height: 1.1;
-  margin-bottom: 48px;
+  letter-spacing: -1.5px;
+  line-height: 1.05;
+  margin-bottom: 20px;
 }
 
-.sub {
-  font-size: 16px;
-  color: var(--fg2);
-  margin-bottom: 32px;
+.lead {
+  font-size: 18px;
+  color: #b0b0b0;
   line-height: 1.65;
+  max-width: 600px;
+}
+
+.title {
+  font-size: clamp(24px, 4vw, 36px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1.15;
+  margin-bottom: 20px;
+}
+
+.body {
+  font-size: 16px;
+  color: #b0b0b0;
+  margin-bottom: 18px;
+  line-height: 1.7;
+  max-width: 640px;
+}
+
+.page a {
+  color: var(--green-h);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.page a:hover { color: #7ee08e; }
+
+.page a:focus-visible {
+  outline: 2px solid var(--green-h);
+  outline-offset: 3px;
+  border-radius: 2px;
 }
 
 /* ── Roadmap ────────────────────────────────────────────────────────────── */
 .productGroup {
-  margin-bottom: 56px;
-}
-
-.productGroup:last-child {
-  margin-bottom: 0;
+  margin-top: 48px;
 }
 
 .productTitle {
@@ -50,9 +80,19 @@
   font-weight: 800;
   color: var(--fg);
   letter-spacing: -0.5px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
+}
+
+.productNote {
+  font-size: 14px;
+  color: #b0b0b0;
+  line-height: 1.65;
+  border-left: 3px solid #e3b341;
+  padding: 2px 0 2px 14px;
+  margin-bottom: 24px;
+  max-width: 640px;
 }
 
 .roadmapGroup {
@@ -68,27 +108,30 @@
   align-items: center;
   gap: 10px;
   font-size: 13px;
-  font-weight: 600;
-  color: var(--fg2);
+  font-weight: 700;
+  color: var(--fg);
   letter-spacing: 0.5px;
-  margin-bottom: 20px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
 }
 
-.dotShipped {
+.dotBuilt {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: var(--green);
+  background: var(--green-h);
   flex-shrink: 0;
 }
 
-.dotPlanned {
+/* hollow, so "not built" differs from "built" by shape, not only by colour */
+.dotNot {
   width: 8px; height: 8px;
   border-radius: 50%;
-  background: var(--fg3);
+  border: 2px solid var(--fg2);
   flex-shrink: 0;
 }
 
 .roadmapList {
+  list-style: none;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
@@ -97,16 +140,14 @@
 }
 
 .roadmapItem {
-  padding: 22px 28px;
+  padding: 20px 28px;
   border-bottom: 1px solid var(--border);
-  transition: background 0.15s;
 }
 
 .roadmapItem:last-child { border-bottom: none; }
 
-.roadmapItem:hover { background: var(--bg2); }
-
-.roadmapItem h4 {
+.roadmapItem strong {
+  display: block;
   font-size: 15px;
   font-weight: 700;
   margin-bottom: 6px;
@@ -115,49 +156,66 @@
 
 .roadmapItem p {
   font-size: 14px;
-  color: var(--fg2);
+  color: #b0b0b0;
   line-height: 1.65;
   margin: 0;
 }
 
 /* ── Contact ────────────────────────────────────────────────────────────── */
-.contactGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 16px;
-}
-
 .contactCard {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
-  padding: 24px;
+  padding: 22px 24px;
   border: 1px solid var(--border);
   border-radius: 10px;
   background: var(--bg2);
   transition: border-color 0.15s, background 0.15s;
-  text-decoration: none;
-  color: inherit;
+  text-decoration: none !important;
+  color: inherit !important;
+  max-width: 480px;
 }
 
 .contactCard:hover {
-  border-color: #444;
+  border-color: #555;
   background: var(--bg3);
 }
 
-.contactIcon { font-size: 24px; flex-shrink: 0; }
-
 .contactTitle {
+  display: block;
   font-size: 12px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.5px;
-  color: var(--fg2);
+  color: var(--green-h);
   text-transform: uppercase;
   margin-bottom: 4px;
 }
 
 .contactValue {
-  font-size: 14px;
+  display: block;
+  font-size: 15px;
   color: var(--fg);
   font-weight: 500;
+}
+
+.arrow {
+  font-size: 20px;
+  color: var(--fg2);
+  flex-shrink: 0;
+}
+
+.footerNav {
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+  font-size: 14px;
+  color: var(--fg2);
+}
+
+@media (max-width: 600px) {
+  .inner { padding: 40px 16px 64px; }
+  .header { margin-bottom: 48px; }
+  .section { margin-bottom: 56px; }
+  .lead { font-size: 16px; }
+  .roadmapItem { padding: 16px; }
 }

@@ -1,0 +1,154 @@
+/* Shared by Privacy and Terms: a single readable column of prose. */
+.page {
+  padding-top: var(--nav-h);
+}
+
+.inner {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 56px 24px 96px;
+}
+
+.label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--green-h);
+  margin-bottom: 14px;
+}
+
+.title {
+  font-size: clamp(32px, 6vw, 48px);
+  font-weight: 800;
+  letter-spacing: -1px;
+  line-height: 1.1;
+  margin-bottom: 12px;
+}
+
+.meta {
+  font-size: 14px;
+  color: var(--fg2);
+  margin-bottom: 28px;
+}
+
+.notice {
+  border: 1px solid var(--border);
+  border-left: 3px solid #e3b341;
+  border-radius: 8px;
+  background: var(--bg2);
+  padding: 16px 18px;
+  margin-bottom: 40px;
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--fg);
+}
+
+.section {
+  margin-bottom: 48px;
+}
+
+.section h2 {
+  font-size: clamp(22px, 3.5vw, 28px);
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.section h3 {
+  font-size: 17px;
+  font-weight: 700;
+  margin: 28px 0 10px;
+}
+
+.section p,
+.section li {
+  font-size: 16px;
+  line-height: 1.7;
+  color: #c4c4c4;
+}
+
+.section p {
+  margin-bottom: 14px;
+}
+
+.section ul,
+.section ol {
+  margin: 0 0 16px;
+  padding-left: 22px;
+}
+
+.section li {
+  margin-bottom: 8px;
+  padding-left: 4px;
+}
+
+.section li::marker {
+  color: var(--green-h);
+}
+
+.section strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.section code {
+  font-family: "Menlo", "Monaco", monospace;
+  font-size: 0.88em;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--fg);
+  overflow-wrap: anywhere;
+}
+
+.cmd {
+  font-family: "Menlo", "Monaco", monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 0 0 16px;
+  color: var(--fg);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.page a {
+  color: var(--green-h);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.page a:hover {
+  color: #7ee08e;
+}
+
+.page a:focus-visible {
+  outline: 2px solid var(--green-h);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+.footerNav {
+  border-top: 1px solid var(--border);
+  padding-top: 24px;
+  font-size: 14px;
+  color: var(--fg2);
+}
+
+@media (max-width: 480px) {
+  .inner {
+    padding: 40px 16px 72px;
+  }
+  .section p,
+  .section li {
+    font-size: 15px;
+  }
+}
